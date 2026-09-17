@@ -1,0 +1,288 @@
+package com.rmkrv.app;
+
+import com.rmkrv.app.api.ApiModels.UpdateProfileRequest;
+import com.rmkrv.app.domain.ActivityType;
+import com.rmkrv.app.domain.Availability;
+import com.rmkrv.app.domain.Conversation;
+import com.rmkrv.app.domain.Message;
+import com.rmkrv.app.domain.Profile;
+import com.rmkrv.app.domain.LiveSearch;
+import com.rmkrv.app.domain.LiveSearchStatus;
+import com.rmkrv.app.repository.ConversationRepository;
+import com.rmkrv.app.repository.LiveSearchRepository;
+import com.rmkrv.app.repository.MessageRepository;
+import com.rmkrv.app.repository.ProfileRepository;
+import com.rmkrv.app.repository.CoopSessionRepository;
+import com.rmkrv.app.repository.ConnectionRepository;
+import com.rmkrv.app.service.ChatService;
+import com.rmkrv.app.service.ConnectionService;
+import com.rmkrv.app.service.CoopSessionService;
+import com.rmkrv.app.service.LeetCodeClient;
+import com.rmkrv.app.service.LiveSearchService;
+import com.rmkrv.app.service.ProfileAuthService;
+import com.rmkrv.app.service.SessionInviteService;
+import com.rmkrv.app.service.VoiceChannelService;
+import com.rmkrv.app.web.UnauthorizedException;
+import jakarta.persistence.EntityManager;
+import jakarta.validation.Validator;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+@SpringBootTest
+class AppApplicationTests {
+	@Autowired Validator validator;
+	@Autowired ProfileAuthService auth;
+	@Autowired ProfileRepository profiles;
+	@Autowired EntityManager entityManager;
+	@Autowired ConversationRepository conversations;
+	@Autowired MessageRepository messages;
+	@Autowired ChatService chat;
+	@Autowired LiveSearchRepository liveSearches;
+	@Autowired LiveSearchService liveSearch;
+	@Autowired CoopSessionService coopSessions;
+	@Autowired CoopSessionRepository coopSessionRepository;
+	@Autowired ConnectionService connectionService;
+	@Autowired ConnectionRepository connectionRepository;
+	@Autowired SessionInviteService sessionInviteService;
+	@Autowired VoiceChannelService voice;
+	@MockitoBean LeetCodeClient leetCode;
+
+	@Test
+	void contextLoads() {
+	}
+
+	@Test
+	void allowsAnEmptyOptionalContact() {
+		var request = new UpdateProfileRequest("Java", "Europe/Warsaw", "", "",
+			Set.of(ActivityType.DSA_PRACTICE), Availability.OCCASIONALLY, null);
+		assertThat(validator.validate(request)).isEmpty();
+	}
+
+	@Test
+	void rejectsMarkupInUserControlledProfileFields() {
+		var request = new UpdateProfileRequest("Java<script>", "Europe/Warsaw", "Discord",
+			"<img src=x onerror=alert(1)>", Set.of(ActivityType.DSA_PRACTICE), Availability.OCCASIONALLY, null);
+		assertThat(validator.validate(request)).extracting(violation -> violation.getPropertyPath().toString())
+			.contains("preferredLanguage", "contactUsername");
+	}
+
+	@Test
+	@Transactional
+	void hashesPasswordsAndIssuesExpiringSessions() {
+		Profile profile = new Profile();
+		profile.leetcodeUsername = "authTestUser";
+		profile.preferredLanguage = "Java";
+		profile.timezone = "Europe/Warsaw";
+		profile.activities.add(ActivityType.DSA_PRACTICE);
+		profile.verified = true;
+		profile.setupComplete = true;
+		String legacyKey = auth.newKey();
+		profile.ownerKeyHash = auth.hash(legacyKey);
+		profiles.saveAndFlush(profile);
+		var setupSession = auth.createSession(profile, false);
+
+		auth.setPassword(profile, "simple-passphrase");
+		profiles.saveAndFlush(profile);
+
+		assertThat(profile.passwordHash).startsWith("$2").doesNotContain("simple-passphrase");
+		assertThatThrownBy(() -> auth.require(legacyKey)).isInstanceOf(UnauthorizedException.class);
+		assertThatThrownBy(() -> auth.require(setupSession.sessionToken())).isInstanceOf(UnauthorizedException.class);
+		var shortSession = auth.login("authTestUser", "simple-passphrase", false);
+		assertThat(shortSession.expiresAt()).isBetween(Instant.now().plusSeconds(11 * 3600), Instant.now().plusSeconds(13 * 3600));
+		var rememberedSession = auth.login("authTestUser", "simple-passphrase", true);
+		assertThat(rememberedSession.expiresAt()).isBetween(Instant.now().plusSeconds(29L * 86400), Instant.now().plusSeconds(31L * 86400));
+		assertThat(auth.require(rememberedSession.sessionToken()).id).isEqualTo(profile.id);
+	}
+
+	@Test
+	@Transactional
+	void loadsTheRealProfileWhenAuthenticatingFromASession() {
+		Profile profile = new Profile();
+		profile.leetcodeUsername = "sessionProfileUser";
+		profile.ownerKeyHash = auth.hash(auth.newKey());
+		profile.verified = true;
+		profile.activities.add(ActivityType.DSA_PRACTICE);
+		profiles.saveAndFlush(profile);
+		var session = auth.createSession(profile, false);
+		entityManager.flush();
+		entityManager.clear();
+
+		Profile loaded = auth.require(session.sessionToken());
+		assertThat(loaded.id).isEqualTo(profile.id);
+		assertThat(loaded.leetcodeUsername).isEqualTo("sessionProfileUser");
+		assertThat(loaded.verified).isTrue();
+		assertThat(loaded.activities).containsExactly(ActivityType.DSA_PRACTICE);
+	}
+
+	@Test
+	@Transactional
+	void loadsConversationProfilesAndMessageSendersAfterThePersistenceContextCloses() {
+		Profile me = new Profile();
+		me.leetcodeUsername = "chatOwner";
+		me.ownerKeyHash = auth.hash(auth.newKey());
+		me.verified = true;
+		me.setupComplete = true;
+		me.preferredLanguage = "Java";
+		me.timezone = "UTC";
+		me.activities.add(ActivityType.DSA_PRACTICE);
+		Profile other = new Profile();
+		other.leetcodeUsername = "chatPartner";
+		other.ownerKeyHash = auth.hash(auth.newKey());
+		other.verified = true;
+		other.setupComplete = true;
+		other.preferredLanguage = "Python";
+		other.timezone = "UTC+1";
+		other.activities.add(ActivityType.CONTESTS);
+		profiles.saveAllAndFlush(List.of(me, other));
+		var session = auth.createSession(me, false);
+		Conversation conversation = new Conversation();
+		conversation.profileA = me;
+		conversation.profileB = other;
+		conversations.saveAndFlush(conversation);
+		Message message = new Message();
+		message.conversation = conversation;
+		message.sender = other;
+		message.content = "Hello";
+		messages.saveAndFlush(message);
+		entityManager.clear();
+
+		var inbox = chat.list(session.sessionToken());
+		assertThat(inbox).singleElement().satisfies(item -> {
+			assertThat(item.otherProfile().leetcodeUsername()).isEqualTo("chatPartner");
+			assertThat(item.otherProfile().activities()).containsExactly(ActivityType.CONTESTS);
+			assertThat(item.lastMessage().senderUsername()).isEqualTo("chatPartner");
+		});
+		assertThat(chat.messages(session.sessionToken(), conversation.id))
+			.singleElement().satisfies(item -> assertThat(item.senderUsername()).isEqualTo("chatPartner"));
+	}
+
+	@Test
+	@Transactional
+	void matchesAQueuedProfileAfterThePersistenceContextCloses() {
+		Profile me = new Profile();
+		me.leetcodeUsername = "queueOwner";
+		me.ownerKeyHash = auth.hash(auth.newKey());
+		me.verified = true;
+		me.setupComplete = true;
+		me.contestRating = 1700.0;
+		me.preferredLanguage = "Python";
+		me.activities.add(ActivityType.CONTESTS);
+		Profile queued = new Profile();
+		queued.leetcodeUsername = "queuedPartner";
+		queued.ownerKeyHash = auth.hash(auth.newKey());
+		queued.verified = true;
+		queued.setupComplete = true;
+		queued.contestRating = 1750.0;
+		queued.preferredLanguage = "Python";
+		queued.activities.add(ActivityType.CONTESTS);
+		profiles.saveAllAndFlush(List.of(me, queued));
+		var session = auth.createSession(me, false);
+		LiveSearch waiting = new LiveSearch();
+		waiting.profile = queued;
+		waiting.status = LiveSearchStatus.SEARCHING;
+		waiting.startedAt = Instant.now();
+		waiting.expiresAt = Instant.now().plusSeconds(300);
+		liveSearches.saveAndFlush(waiting);
+		entityManager.clear();
+
+		var match = liveSearch.join(session.sessionToken());
+		assertThat(match.status()).isEqualTo("MATCHED");
+		assertThat(match.match().leetcodeUsername()).isEqualTo("queuedPartner");
+	}
+
+	@Test
+	@Transactional
+	void startsACooperativeSessionAndConnectsThePartners() {
+		Profile first = sessionProfile("coopFirst", "first#1234", 1600);
+		Profile second = sessionProfile("coopSecond", "second#1234", 1650);
+		profiles.saveAllAndFlush(List.of(first, second));
+		var firstSession = auth.createSession(first, false);
+		var secondSession = auth.createSession(second, false);
+
+		var waiting = coopSessions.join(firstSession.sessionToken());
+		assertThat(waiting.state()).isEqualTo("SEARCHING");
+		var negotiating = coopSessions.join(secondSession.sessionToken());
+		assertThat(negotiating.state()).isEqualTo("NEGOTIATING");
+		assertThat(negotiating.problem()).isNotNull();
+		assertThat(negotiating.partner().id()).isEqualTo(first.id);
+		assertThat(negotiating.startedAt()).isNull();
+		String originalSlug = negotiating.problem().titleSlug();
+		var rerollRequested = coopSessions.reroll(firstSession.sessionToken(), negotiating.id());
+		assertThat(rerollRequested.rerollRequestedById()).isEqualTo(first.id);
+		var rerolled = coopSessions.reroll(secondSession.sessionToken(), negotiating.id());
+		assertThat(rerolled.problem().titleSlug()).isNotEqualTo(originalSlug);
+		var suggested = coopSessions.suggest(firstSession.sessionToken(), negotiating.id(), "Two Sum");
+		assertThat(suggested.problem().titleSlug()).isEqualTo("two-sum");
+		assertThat(suggested.myAccepted()).isFalse();
+
+		var firstAccepted = coopSessions.accept(firstSession.sessionToken(), negotiating.id());
+		assertThat(firstAccepted.state()).isEqualTo("NEGOTIATING");
+		assertThat(firstAccepted.myAccepted()).isTrue();
+		var active = coopSessions.accept(secondSession.sessionToken(), negotiating.id());
+		assertThat(active.state()).isEqualTo("ACTIVE");
+		assertThat(active.startedAt()).isNotNull();
+		voice.join(firstSession.sessionToken(), active.id());
+		voice.join(secondSession.sessionToken(), active.id());
+		voice.mute(firstSession.sessionToken(), active.id(), true);
+		assertThat(voice.presence(active.id(), first.id).muted()).isTrue();
+		voice.signal(firstSession.sessionToken(), active.id(), "OFFER", "offer-sdp");
+		assertThat(voice.signals(secondSession.sessionToken(), active.id(), 0)).singleElement()
+			.satisfies(signal -> assertThat(signal.payload()).isEqualTo("offer-sdp"));
+		var message = coopSessions.send(firstSession.sessionToken(), active.id(), "Let's compare approaches after this.");
+		assertThat(message.senderUsername()).isEqualTo("coopFirst");
+		assertThat(coopSessions.messages(secondSession.sessionToken(), active.id())).singleElement();
+
+		var request = connectionService.send(firstSession.sessionToken(), second.id, active.id());
+		assertThat(request.status()).isEqualTo("PENDING");
+		var incoming = connectionService.list(secondSession.sessionToken()).getFirst();
+		assertThat(incoming.direction()).isEqualTo("INCOMING");
+		assertThat(incoming.otherProfile().contactUsername()).isNull();
+		var accepted = connectionService.accept(secondSession.sessionToken(), incoming.id());
+		assertThat(accepted.status()).isEqualTo("ACCEPTED");
+		assertThat(accepted.otherProfile().contactUsername()).isEqualTo("first#1234");
+
+		var closed = coopSessions.leave(firstSession.sessionToken(), active.id());
+		assertThat(closed.state()).isEqualTo("CLOSED");
+		assertThat(connectionRepository.findBetween(first.id, second.id)).isPresent();
+		assertThat(coopSessionRepository.findById(active.id()).orElseThrow().startedAt).isNotNull();
+
+		var invitation = sessionInviteService.create(firstSession.sessionToken(), second.id);
+		assertThat(invitation.status()).isEqualTo("PENDING");
+		assertThat(invitation.direction()).isEqualTo("OUTGOING");
+		var incomingInvitation = sessionInviteService.list(secondSession.sessionToken()).getFirst();
+		assertThat(incomingInvitation.direction()).isEqualTo("INCOMING");
+		var acceptedInvitation = sessionInviteService.accept(secondSession.sessionToken(), invitation.id());
+		assertThat(acceptedInvitation.status()).isEqualTo("ACCEPTED");
+		assertThat(acceptedInvitation.sessionId()).isNotNull();
+		var invitedSession = coopSessions.current(firstSession.sessionToken());
+		assertThat(invitedSession.id()).isEqualTo(acceptedInvitation.sessionId());
+		assertThat(invitedSession.state()).isEqualTo("NEGOTIATING");
+		assertThat(invitedSession.partner().id()).isEqualTo(second.id);
+	}
+
+	private Profile sessionProfile(String username, String contact, double rating) {
+		Profile profile = new Profile();
+		profile.leetcodeUsername = username;
+		profile.ownerKeyHash = auth.hash(auth.newKey());
+		profile.verified = true;
+		profile.setupComplete = true;
+		profile.preferredLanguage = "Java";
+		profile.timezone = "UTC";
+		profile.contactType = "Discord";
+		profile.contactUsername = contact;
+		profile.contestRating = rating;
+		profile.activities.add(ActivityType.CONTESTS);
+		return profile;
+	}
+
+}

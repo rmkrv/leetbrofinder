@@ -1,0 +1,73 @@
+# LeetBroFinder
+
+LeetBroFinder is a small, non-commercial app for finding LeetCode practice partners. Users verify ownership of a public LeetCode profile, add their practice preferences, browse compatible profiles, message each other, or open a cooperative coding session with another queued user.
+
+## Stack
+
+- React + Vite + TypeScript
+- Spring Boot REST API (Java 21)
+- PostgreSQL + Flyway migrations
+- LeetCode's public GraphQL endpoint with a 15-minute Caffeine cache
+
+## Run locally
+
+1. Start PostgreSQL:
+
+   ```bash
+   docker compose up -d postgres
+   ```
+
+2. Start the API:
+
+   ```bash
+   cd app
+   ./mvnw spring-boot:run
+   ```
+
+   On Windows, use `mvnw.cmd spring-boot:run`.
+
+3. Start the web app:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+Open `http://localhost:5173`.
+
+## Verification
+
+The app generates a short token such as `leetbro-verify-a1b2...`. The user adds it to their public LeetCode **About** section, then asks the app to check it. LeetBroFinder never requests a LeetCode password, cookie, or session token. After verification, the user finishes setup and creates a separate LeetBroFinder password. Passwords are stored as BCrypt hashes, never as plaintext.
+
+Users log in with their LeetCode username and LeetBroFinder password. A normal login lasts 12 hours in the current browser session. Selecting **Stay signed in for 30 days** stores an opaque session token on that device for 30 days.
+
+## Configuration
+
+Copy `.env.example` values into your environment as needed. The frontend proxies `/api` to `http://localhost:8080` during development. Production builds set `VITE_API_URL` to the deployed API origin.
+
+The Spring Boot API reads `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. For Neon, use a direct JDBC URL (`jdbc:postgresql://...`) so the same connection can safely run Flyway migrations at startup. No database credentials are stored in application configuration or source control.
+
+For local Docker Compose, set `POSTGRES_PASSWORD` for the container and export the `DB_*` values shown in `.env.example` before starting Spring Boot.
+
+## API highlights
+
+- `POST /api/verification/start`
+- `POST /api/verification/{id}/confirm`
+- `POST /api/auth/login` and `POST /api/auth/logout`
+- `GET /api/profiles` with rating, language, activity, availability, and timezone filters
+- `PATCH /api/profiles/me`
+- `POST /api/live-search` and `GET /api/live-search/{id}`
+- `POST /api/coop-sessions/queue` and `GET /api/coop-sessions/{id}`
+- `POST /api/coop-sessions/{id}/accept`, `/reroll`, `/suggest`, and `/leave`
+- `GET/POST /api/coop-sessions/{id}/messages` and the `/voice/*` signaling endpoints
+- `GET/POST /api/connections` and `POST /api/connections/{id}/accept`
+- `GET/POST /api/conversations`
+
+## Cooperative coding sessions
+
+The API owns the matchmaking queue and pairs users by the closest available contest rating. It suggests a random difficulty-appropriate problem. Either partner can suggest a LeetCode URL/title, and a reroll needs the other partner's agreement. The session becomes active only when both users accept the current problem. There is no timer, score, winner, or submission verification.
+
+Session discussion is stored with the session. Optional voice uses browser WebRTC audio and short-lived, in-memory signaling state on the API; it is not a persistent voice room. Partners can exchange connection requests after a session starts, and contact details remain hidden until the recipient accepts.
+
+Authenticated profile actions use an opaque session token in the internal `X-Profile-Key` header. The token is managed by the frontend and is never presented as a user credential. API responses are rate-limited per client IP.

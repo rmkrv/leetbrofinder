@@ -1,0 +1,15 @@
+import { useEffect } from 'react'
+import { Route, Routes, useLocation } from 'react-router-dom'
+import Layout from './components/Layout'
+import HomePage from './pages/HomePage'
+import LiveSearchPage from './pages/LiveSearchPage'
+import MessagesPage from './pages/MessagesPage'
+import ProfileFormPage from './pages/ProfileFormPage'
+import UserProfilePage from './pages/UserProfilePage'
+import VerificationPage from './pages/VerificationPage'
+import LoginPage from './pages/LoginPage'
+import CoopSessionPage from './pages/CoopSessionPage'
+import ConnectionsPage from './pages/ConnectionsPage'
+import { useWebMcp } from './useWebMcp'
+function ScrollToTop(){const{pathname}=useLocation();useEffect(()=>{window.scrollTo({top:0,behavior:'auto'})},[pathname]);return null}
+export default function App(){useWebMcp();return <><ScrollToTop/><Routes><Route element={<Layout/>}><Route index element={<HomePage/>}/><Route path="verify" element={<VerificationPage/>}/><Route path="login" element={<LoginPage/>}/><Route path="profile/edit" element={<ProfileFormPage/>}/><Route path="profiles/:id" element={<UserProfilePage/>}/><Route path="messages" element={<MessagesPage/>}/><Route path="live" element={<LiveSearchPage/>}/><Route path="session" element={<CoopSessionPage/>}/><Route path="connections" element={<ConnectionsPage/>}/></Route></Routes></>}
