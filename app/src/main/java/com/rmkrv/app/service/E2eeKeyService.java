@@ -61,7 +61,7 @@ public class E2eeKeyService {
             return response(sameFingerprint);
         }
 
-        E2eeDevice sameId = devices.findById(request.deviceId()).orElse(null);
+        E2eeDevice sameId = request.deviceId() == null ? null : devices.findById(request.deviceId()).orElse(null);
         if (sameId != null) {
             if (!sameId.profile.id.equals(profile.id)) {
                 throw new BadRequestException("Encryption device is already registered");
@@ -73,18 +73,18 @@ public class E2eeKeyService {
         }
 
         E2eeDevice device = new E2eeDevice();
-        device.id = request.deviceId();
+        device.id = request.deviceId() == null ? UUID.randomUUID() : request.deviceId();
         device.profile = profile;
         device.encryptionPublicKey = encryptionKey;
         device.signingPublicKey = signingKey;
         device.fingerprint = fingerprint;
-        device.version = CURRENT_VERSION;
+        device.version = request.deviceId() == null ? 1 : CURRENT_VERSION;
         device.createdAt = Instant.now();
         return response(devices.save(device));
     }
 
     @Transactional(readOnly = true)
-    public List<E2eeKeyBundleResponse> get(String sessionKey, UUID profileId) {
+    public List<E2eeKeyBundleResponse> getAll(String sessionKey, UUID profileId) {
         auth.requireComplete(sessionKey);
         Profile profile = profiles.findById(profileId)
             .filter(candidate -> candidate.verified && candidate.setupComplete)
@@ -93,9 +93,16 @@ public class E2eeKeyService {
     }
 
     @Transactional(readOnly = true)
+    public E2eeKeyBundleResponse getLegacy(String sessionKey, UUID profileId) {
+        List<E2eeKeyBundleResponse> registered = getAll(sessionKey, profileId);
+        return registered.stream().filter(bundle -> bundle.version() == 1).findFirst()
+            .orElse(registered.isEmpty() ? null : registered.getFirst());
+    }
+
+    @Transactional(readOnly = true)
     public void validateEnvelope(Profile sender, Profile recipient, EncryptedMessageRequest request) {
         if (recipient == null) throw new BadRequestException("Message recipient not found");
-        if (request.cryptoVersion() != CURRENT_VERSION) {
+        if (request.cryptoVersion() != 1 && request.cryptoVersion() != CURRENT_VERSION) {
             throw new BadRequestException("Unsupported message encryption version");
         }
 
@@ -106,6 +113,19 @@ public class E2eeKeyService {
         }
         if (recipientDevices.isEmpty()) {
             throw new BadRequestException("The other user has not enabled end-to-end encrypted messaging yet");
+        }
+
+        if (request.cryptoVersion() == 1) {
+            boolean recipientMatches = request.recipientKeyFingerprint() != null && recipientDevices.stream()
+                .anyMatch(device -> device.fingerprint.equals(request.recipientKeyFingerprint()));
+            if (!recipientMatches) {
+                throw new BadRequestException("Encryption keys changed. Refresh the conversation before sending");
+            }
+            return;
+        }
+
+        if (request.recipientKeys() == null || request.recipientKeys().isEmpty()) {
+            throw new BadRequestException("Encrypted recipient keys are required");
         }
 
         Set<String> required = new HashSet<>();

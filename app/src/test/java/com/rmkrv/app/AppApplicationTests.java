@@ -185,18 +185,21 @@ class AppApplicationTests {
 		String encryptionKey = publicJwk("a");
 		String signingKey = publicJwk("b");
 
-		UUID firstDeviceId = UUID.randomUUID();
-		var registered = e2eeKeys.register(session.sessionToken(), new RegisterE2eeKeysRequest(firstDeviceId, encryptionKey, signingKey));
+		var registered = e2eeKeys.register(session.sessionToken(), new RegisterE2eeKeysRequest(null, encryptionKey, signingKey));
 		assertThat(registered.profileId()).isEqualTo(profile.id);
-		assertThat(registered.deviceId()).isEqualTo(firstDeviceId);
+		assertThat(registered.deviceId()).isNotNull();
+		assertThat(registered.version()).isEqualTo(1);
 		assertThat(registered.fingerprint()).hasSize(64);
+		UUID secondDeviceId = UUID.randomUUID();
 		var second = e2eeKeys.register(session.sessionToken(), new RegisterE2eeKeysRequest(
-			UUID.randomUUID(), publicJwk("c"), publicJwk("d")));
-		assertThat(e2eeKeys.get(session.sessionToken(), profile.id))
+			secondDeviceId, publicJwk("c"), publicJwk("d")));
+		assertThat(e2eeKeys.getAll(session.sessionToken(), profile.id))
 			.extracting(bundle -> bundle.fingerprint())
 			.containsExactly(registered.fingerprint(), second.fingerprint());
+		assertThat(e2eeKeys.getLegacy(session.sessionToken(), profile.id).fingerprint())
+			.isEqualTo(registered.fingerprint());
 		assertThatThrownBy(() -> e2eeKeys.register(session.sessionToken(),
-			new RegisterE2eeKeysRequest(firstDeviceId, publicJwk("e"), signingKey)))
+			new RegisterE2eeKeysRequest(secondDeviceId, publicJwk("e"), signingKey)))
 			.isInstanceOf(com.rmkrv.app.web.BadRequestException.class)
 			.hasMessageContaining("different encryption keys");
 	}
@@ -228,10 +231,17 @@ class AppApplicationTests {
 
 		var missingDevice = new EncryptedMessageRequest(envelope.ciphertext(), envelope.iv(), envelope.salt(),
 			envelope.signature(), envelope.cryptoVersion(), envelope.senderKeyFingerprint(),
-			envelope.recipientKeys().subList(0, 2));
+			null, envelope.recipientKeys().subList(0, 2));
 		assertThatThrownBy(() -> chat.send(session.sessionToken(), conversation.id, missingDevice))
 			.isInstanceOf(com.rmkrv.app.web.BadRequestException.class)
 			.hasMessageContaining("devices changed");
+
+		String legacyRecipient = e2eeDevices.findByProfileIdOrderByCreatedAtAsc(recipient.id).getFirst().fingerprint;
+		var legacyEnvelope = new EncryptedMessageRequest("bGVnYWN5", "aXYxMjM", "c2FsdDEyMw", "c2lnbmF0dXJl",
+			1, envelope.senderKeyFingerprint(), legacyRecipient, null);
+		var legacyResponse = chat.send(session.sessionToken(), conversation.id, legacyEnvelope);
+		assertThat(legacyResponse.cryptoVersion()).isEqualTo(1);
+		assertThat(legacyResponse.recipientKeyFingerprint()).isEqualTo(legacyRecipient);
 	}
 
 	@Test
@@ -388,7 +398,7 @@ class AppApplicationTests {
 		e2eeDevices.findByProfileIdOrderByCreatedAtAsc(recipient.id).forEach(device ->
 			recipients.add(new RecipientKeyEnvelope(device.fingerprint, "d3JhcHBlZA", "aXYxMjM")));
 		return new EncryptedMessageRequest(ciphertext, "aXYxMjM", "c2FsdDEyMw", "c2lnbmF0dXJl",
-			2, senderFingerprint, recipients);
+			2, senderFingerprint, null, recipients);
 	}
 
 	private String publicJwk(String digit) {

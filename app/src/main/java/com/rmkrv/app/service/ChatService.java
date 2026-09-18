@@ -61,7 +61,8 @@ public class ChatService {
         m.ciphertext = request.ciphertext(); m.encryptionIv = request.iv(); m.encryptionSalt = request.salt();
         m.signature = request.signature(); m.cryptoVersion = request.cryptoVersion();
         m.senderKeyFingerprint = request.senderKeyFingerprint();
-        m.recipientKeyEnvelopes = e2ee.encodeRecipients(request.recipientKeys());
+        m.recipientKeyFingerprint = request.recipientKeyFingerprint();
+        if (request.recipientKeys() != null) m.recipientKeyEnvelopes = e2ee.encodeRecipients(request.recipientKeys());
         return message(messages.save(m));
     }
 

@@ -65,7 +65,7 @@ export const listConversations = () => request<Conversation[]>('/api/conversatio
 export const startConversation = (targetProfileId: string) => request<Conversation>('/api/conversations', { method: 'POST', body: JSON.stringify({ targetProfileId }) })
 export const getMessages = (id: string) => request<Message[]>(`/api/conversations/${id}/messages`)
 export const sendMessage = (id: string, payload: EncryptedMessagePayload) => request<Message>(`/api/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify(payload) })
-export const getE2eeKeyBundles = (profileId: string) => request<E2eeKeyBundle[]>(`/api/e2ee/keys/${profileId}`)
+export const getE2eeKeyBundles = (profileId: string) => request<E2eeKeyBundle[]>(`/api/e2ee/keys/${profileId}/devices`)
 export const registerE2eeKeys = (deviceId: string, encryptionPublicKey: string, signingPublicKey: string) => request<E2eeKeyBundle>('/api/e2ee/keys/me', { method: 'PUT', body: JSON.stringify({ deviceId, encryptionPublicKey, signingPublicKey }) })
 export const joinLiveSearch = () => request<LiveSearch>('/api/live-search', { method: 'POST' })
 export const getLiveSearch = (id: string) => request<LiveSearch>(`/api/live-search/${id}`)

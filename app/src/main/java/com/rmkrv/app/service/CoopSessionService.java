@@ -167,7 +167,8 @@ public class CoopSessionService {
         item.ciphertext = request.ciphertext(); item.encryptionIv = request.iv(); item.encryptionSalt = request.salt();
         item.signature = request.signature(); item.cryptoVersion = request.cryptoVersion();
         item.senderKeyFingerprint = request.senderKeyFingerprint();
-        item.recipientKeyEnvelopes = e2ee.encodeRecipients(request.recipientKeys());
+        item.recipientKeyFingerprint = request.recipientKeyFingerprint();
+        if (request.recipientKeys() != null) item.recipientKeyEnvelopes = e2ee.encodeRecipients(request.recipientKeys());
         return message(messages.save(item));
     }
 

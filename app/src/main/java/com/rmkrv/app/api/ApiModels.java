@@ -51,7 +51,7 @@ public final class ApiModels {
     public record AuthResponse(ProfileResponse profile, String sessionToken, Instant expiresAt) {}
     public record StartConversationRequest(@NotNull UUID targetProfileId) {}
     public record RegisterE2eeKeysRequest(
-        @NotNull UUID deviceId,
+        UUID deviceId,
         @NotBlank @Size(max = 1000) String encryptionPublicKey,
         @NotBlank @Size(max = 1000) String signingPublicKey
     ) {}
@@ -69,9 +69,10 @@ public final class ApiModels {
         @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String iv,
         @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String salt,
         @NotBlank @Size(max = 256) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String signature,
-        @NotNull @Min(2) @Max(2) Integer cryptoVersion,
+        @NotNull @Min(1) @Max(2) Integer cryptoVersion,
         @NotBlank @Pattern(regexp = "^[a-f0-9]{64}$") String senderKeyFingerprint,
-        @NotEmpty @Size(max = 20) List<@Valid RecipientKeyEnvelope> recipientKeys
+        @Pattern(regexp = "^[a-f0-9]{64}$") String recipientKeyFingerprint,
+        @Size(max = 20) List<@Valid RecipientKeyEnvelope> recipientKeys
     ) {}
     public record MessageResponse(
         UUID id, UUID senderId, String senderUsername, String content,
