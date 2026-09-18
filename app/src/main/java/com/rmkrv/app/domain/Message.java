@@ -18,6 +18,7 @@ public class Message {
     @Column(name = "crypto_version") public Integer cryptoVersion;
     @Column(name = "sender_key_fingerprint", length = 64) public String senderKeyFingerprint;
     @Column(name = "recipient_key_fingerprint", length = 64) public String recipientKeyFingerprint;
+    @Column(name = "recipient_key_envelopes", columnDefinition = "TEXT") public String recipientKeyEnvelopes;
     @Column(name = "created_at", nullable = false) public Instant createdAt;
     @PrePersist void prePersist() { if (id == null) id = UUID.randomUUID(); if (createdAt == null) createdAt = Instant.now(); }
 }

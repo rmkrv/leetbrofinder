@@ -61,7 +61,7 @@ public class ChatService {
         m.ciphertext = request.ciphertext(); m.encryptionIv = request.iv(); m.encryptionSalt = request.salt();
         m.signature = request.signature(); m.cryptoVersion = request.cryptoVersion();
         m.senderKeyFingerprint = request.senderKeyFingerprint();
-        m.recipientKeyFingerprint = request.recipientKeyFingerprint();
+        m.recipientKeyEnvelopes = e2ee.encodeRecipients(request.recipientKeys());
         return message(messages.save(m));
     }
 
@@ -78,6 +78,7 @@ public class ChatService {
     private MessageResponse message(Message m) {
         return new MessageResponse(m.id, m.sender.id, m.sender.leetcodeUsername, m.content,
             m.ciphertext, m.encryptionIv, m.encryptionSalt, m.signature, m.cryptoVersion,
-            m.senderKeyFingerprint, m.recipientKeyFingerprint, m.createdAt);
+            m.senderKeyFingerprint, m.recipientKeyFingerprint,
+            e2ee.decodeRecipients(m.recipientKeyEnvelopes), m.createdAt);
     }
 }

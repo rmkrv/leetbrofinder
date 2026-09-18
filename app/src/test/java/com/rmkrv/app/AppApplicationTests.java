@@ -1,17 +1,20 @@
 package com.rmkrv.app;
 
 import com.rmkrv.app.api.ApiModels.EncryptedMessageRequest;
+import com.rmkrv.app.api.ApiModels.RecipientKeyEnvelope;
 import com.rmkrv.app.api.ApiModels.RegisterE2eeKeysRequest;
 import com.rmkrv.app.api.ApiModels.SessionProblem;
 import com.rmkrv.app.api.ApiModels.UpdateProfileRequest;
 import com.rmkrv.app.domain.ActivityType;
 import com.rmkrv.app.domain.Availability;
 import com.rmkrv.app.domain.Conversation;
+import com.rmkrv.app.domain.E2eeDevice;
 import com.rmkrv.app.domain.Message;
 import com.rmkrv.app.domain.Profile;
 import com.rmkrv.app.domain.LiveSearch;
 import com.rmkrv.app.domain.LiveSearchStatus;
 import com.rmkrv.app.repository.ConversationRepository;
+import com.rmkrv.app.repository.E2eeDeviceRepository;
 import com.rmkrv.app.repository.LiveSearchRepository;
 import com.rmkrv.app.repository.MessageRepository;
 import com.rmkrv.app.repository.ProfileRepository;
@@ -56,6 +59,7 @@ class AppApplicationTests {
 	@Autowired LiveSearchService liveSearch;
 	@Autowired CoopSessionService coopSessions;
 	@Autowired E2eeKeyService e2eeKeys;
+	@Autowired E2eeDeviceRepository e2eeDevices;
 	@Autowired CoopSessionRepository coopSessionRepository;
 	@Autowired ConnectionService connectionService;
 	@Autowired ConnectionRepository connectionRepository;
@@ -174,21 +178,27 @@ class AppApplicationTests {
 
 	@Test
 	@Transactional
-	void registersImmutablePublicEncryptionKeys() {
+	void registersPublicEncryptionKeysForMultipleDevices() {
 		Profile profile = sessionProfile("encryptedUser", "encrypted#1234", 1500);
 		profiles.saveAndFlush(profile);
 		var session = auth.createSession(profile, false);
 		String encryptionKey = publicJwk("a");
 		String signingKey = publicJwk("b");
 
-		var registered = e2eeKeys.register(session.sessionToken(), new RegisterE2eeKeysRequest(encryptionKey, signingKey));
+		UUID firstDeviceId = UUID.randomUUID();
+		var registered = e2eeKeys.register(session.sessionToken(), new RegisterE2eeKeysRequest(firstDeviceId, encryptionKey, signingKey));
 		assertThat(registered.profileId()).isEqualTo(profile.id);
+		assertThat(registered.deviceId()).isEqualTo(firstDeviceId);
 		assertThat(registered.fingerprint()).hasSize(64);
-		assertThat(e2eeKeys.get(session.sessionToken(), profile.id).fingerprint()).isEqualTo(registered.fingerprint());
+		var second = e2eeKeys.register(session.sessionToken(), new RegisterE2eeKeysRequest(
+			UUID.randomUUID(), publicJwk("c"), publicJwk("d")));
+		assertThat(e2eeKeys.get(session.sessionToken(), profile.id))
+			.extracting(bundle -> bundle.fingerprint())
+			.containsExactly(registered.fingerprint(), second.fingerprint());
 		assertThatThrownBy(() -> e2eeKeys.register(session.sessionToken(),
-			new RegisterE2eeKeysRequest(publicJwk("c"), signingKey)))
+			new RegisterE2eeKeysRequest(firstDeviceId, publicJwk("e"), signingKey)))
 			.isInstanceOf(com.rmkrv.app.web.BadRequestException.class)
-			.hasMessageContaining("already registered");
+			.hasMessageContaining("different encryption keys");
 	}
 
 	@Test
@@ -196,24 +206,32 @@ class AppApplicationTests {
 	void storesOnlyCiphertextForNewDirectMessages() {
 		Profile sender = sessionProfile("encryptedSender", "sender#1234", 1500);
 		Profile recipient = sessionProfile("encryptedRecipient", "recipient#1234", 1510);
+		profiles.saveAllAndFlush(List.of(sender, recipient));
 		enableE2ee(sender, "d");
 		enableE2ee(recipient, "e");
-		profiles.saveAllAndFlush(List.of(sender, recipient));
+		enableE2ee(recipient, "f");
 		var session = auth.createSession(sender, false);
 		Conversation conversation = new Conversation();
 		conversation.profileA = sender;
 		conversation.profileB = recipient;
 		conversations.saveAndFlush(conversation);
-		var envelope = new EncryptedMessageRequest("ZW5jcnlwdGVk", "aXYxMjM", "c2FsdDEyMw", "c2lnbmF0dXJl",
-			1, sender.e2eeKeyFingerprint, recipient.e2eeKeyFingerprint);
+		var envelope = encryptedRequest(sender, recipient, "ZW5jcnlwdGVk");
 
 		var response = chat.send(session.sessionToken(), conversation.id, envelope);
 
 		assertThat(response.content()).isNull();
 		assertThat(response.ciphertext()).isEqualTo("ZW5jcnlwdGVk");
+		assertThat(response.recipientKeys()).hasSize(3);
 		Message stored = messages.findById(response.id()).orElseThrow();
 		assertThat(stored.content).isNull();
 		assertThat(stored.ciphertext).isEqualTo("ZW5jcnlwdGVk");
+
+		var missingDevice = new EncryptedMessageRequest(envelope.ciphertext(), envelope.iv(), envelope.salt(),
+			envelope.signature(), envelope.cryptoVersion(), envelope.senderKeyFingerprint(),
+			envelope.recipientKeys().subList(0, 2));
+		assertThatThrownBy(() -> chat.send(session.sessionToken(), conversation.id, missingDevice))
+			.isInstanceOf(com.rmkrv.app.web.BadRequestException.class)
+			.hasMessageContaining("devices changed");
 	}
 
 	@Test
@@ -261,9 +279,9 @@ class AppApplicationTests {
 		when(leetCode.randomProblem(null)).thenReturn(initialProblem, invitedProblem);
 		when(leetCode.randomProblem(initialProblem.titleSlug())).thenReturn(rerolledProblem);
 		when(leetCode.resolveProblem("Two Sum")).thenReturn(initialProblem);
+		profiles.saveAllAndFlush(List.of(first, second));
 		enableE2ee(first, "a");
 		enableE2ee(second, "b");
-		profiles.saveAllAndFlush(List.of(first, second));
 		var firstSession = auth.createSession(first, false);
 		var secondSession = auth.createSession(second, false);
 
@@ -296,8 +314,7 @@ class AppApplicationTests {
 		voice.signal(firstSession.sessionToken(), active.id(), "OFFER", "offer-sdp");
 		assertThat(voice.signals(secondSession.sessionToken(), active.id(), 0)).singleElement()
 			.satisfies(signal -> assertThat(signal.payload()).isEqualTo("offer-sdp"));
-		var encrypted = new EncryptedMessageRequest("Y2lwaGVydGV4dA", "aXYxMjM", "c2FsdDEyMw", "c2lnbmF0dXJl",
-			1, first.e2eeKeyFingerprint, second.e2eeKeyFingerprint);
+		var encrypted = encryptedRequest(first, second, "Y2lwaGVydGV4dA");
 		var message = coopSessions.send(firstSession.sessionToken(), active.id(), encrypted);
 		assertThat(message.senderUsername()).isEqualTo("coopFirst");
 		assertThat(message.content()).isNull();
@@ -352,11 +369,26 @@ class AppApplicationTests {
 	}
 
 	private void enableE2ee(Profile profile, String digit) {
-		profile.e2eeEncryptionPublicKey = publicJwk(digit);
-		profile.e2eeSigningPublicKey = profile.e2eeEncryptionPublicKey;
-		profile.e2eeKeyFingerprint = digit.repeat(64);
-		profile.e2eeKeyVersion = 1;
-		profile.e2eeKeyCreatedAt = Instant.now();
+		E2eeDevice device = new E2eeDevice();
+		device.id = UUID.randomUUID();
+		device.profile = profile;
+		device.encryptionPublicKey = publicJwk(digit);
+		device.signingPublicKey = device.encryptionPublicKey;
+		device.fingerprint = digit.repeat(64);
+		device.version = 2;
+		device.createdAt = Instant.now();
+		e2eeDevices.saveAndFlush(device);
+	}
+
+	private EncryptedMessageRequest encryptedRequest(Profile sender, Profile recipient, String ciphertext) {
+		String senderFingerprint = e2eeDevices.findByProfileIdOrderByCreatedAtAsc(sender.id).getFirst().fingerprint;
+		List<RecipientKeyEnvelope> recipients = new java.util.ArrayList<>();
+		e2eeDevices.findByProfileIdOrderByCreatedAtAsc(sender.id).forEach(device ->
+			recipients.add(new RecipientKeyEnvelope(device.fingerprint, "d3JhcHBlZA", "aXYxMjM")));
+		e2eeDevices.findByProfileIdOrderByCreatedAtAsc(recipient.id).forEach(device ->
+			recipients.add(new RecipientKeyEnvelope(device.fingerprint, "d3JhcHBlZA", "aXYxMjM")));
+		return new EncryptedMessageRequest(ciphertext, "aXYxMjM", "c2FsdDEyMw", "c2lnbmF0dXJl",
+			2, senderFingerprint, recipients);
 	}
 
 	private String publicJwk(String digit) {

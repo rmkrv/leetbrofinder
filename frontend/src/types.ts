@@ -6,9 +6,10 @@ export interface Profile { id: string; leetcodeUsername: string; preferredLangua
 export interface PageResponse<T> { content: T[]; totalElements: number; totalPages: number; number: number }
 export interface Challenge { challengeId: string; username: string; token: string; expiresAt: string }
 export interface AuthResult { profile: Profile; sessionToken: string; expiresAt: string }
-export interface E2eeKeyBundle { profileId: string; encryptionPublicKey: string; signingPublicKey: string; fingerprint: string; version: number; createdAt: string }
-export interface EncryptedMessagePayload { ciphertext: string; iv: string; salt: string; signature: string; cryptoVersion: 1; senderKeyFingerprint: string; recipientKeyFingerprint: string }
-export interface EncryptedMessageEnvelope extends Partial<EncryptedMessagePayload> { content: string | null }
+export interface E2eeKeyBundle { deviceId: string; profileId: string; encryptionPublicKey: string; signingPublicKey: string; fingerprint: string; version: number; createdAt: string }
+export interface RecipientKeyEnvelope { keyFingerprint: string; wrappedKey: string; iv: string }
+export interface EncryptedMessagePayload { ciphertext: string; iv: string; salt: string; signature: string; cryptoVersion: 2; senderKeyFingerprint: string; recipientKeys: RecipientKeyEnvelope[] }
+export interface EncryptedMessageEnvelope extends Omit<Partial<EncryptedMessagePayload>, 'cryptoVersion'> { content: string | null; cryptoVersion?: 1 | 2; recipientKeyFingerprint?: string }
 export interface Message extends EncryptedMessageEnvelope { id: string; senderId: string; senderUsername: string; createdAt: string }
 export interface Conversation { id: string; otherProfile: Profile; lastMessage: Message | null; createdAt: string }
 export interface LiveSearch { id: string; status: 'SEARCHING' | 'MATCHED' | 'CANCELLED' | 'EXPIRED'; expiresAt: string; match: Profile | null }

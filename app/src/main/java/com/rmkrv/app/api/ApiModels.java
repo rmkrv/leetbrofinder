@@ -2,6 +2,7 @@ package com.rmkrv.app.api;
 
 import com.rmkrv.app.domain.ActivityType;
 import com.rmkrv.app.domain.Availability;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.Instant;
 import java.util.List;
@@ -50,26 +51,33 @@ public final class ApiModels {
     public record AuthResponse(ProfileResponse profile, String sessionToken, Instant expiresAt) {}
     public record StartConversationRequest(@NotNull UUID targetProfileId) {}
     public record RegisterE2eeKeysRequest(
+        @NotNull UUID deviceId,
         @NotBlank @Size(max = 1000) String encryptionPublicKey,
         @NotBlank @Size(max = 1000) String signingPublicKey
     ) {}
     public record E2eeKeyBundleResponse(
-        UUID profileId, String encryptionPublicKey, String signingPublicKey,
+        UUID deviceId, UUID profileId, String encryptionPublicKey, String signingPublicKey,
         String fingerprint, int version, Instant createdAt
+    ) {}
+    public record RecipientKeyEnvelope(
+        @NotBlank @Pattern(regexp = "^[a-f0-9]{64}$") String keyFingerprint,
+        @NotBlank @Size(max = 256) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String wrappedKey,
+        @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String iv
     ) {}
     public record EncryptedMessageRequest(
         @NotBlank @Size(max = 8192) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String ciphertext,
         @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String iv,
         @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String salt,
         @NotBlank @Size(max = 256) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String signature,
-        @NotNull @Min(1) @Max(1) Integer cryptoVersion,
+        @NotNull @Min(2) @Max(2) Integer cryptoVersion,
         @NotBlank @Pattern(regexp = "^[a-f0-9]{64}$") String senderKeyFingerprint,
-        @NotBlank @Pattern(regexp = "^[a-f0-9]{64}$") String recipientKeyFingerprint
+        @NotEmpty @Size(max = 20) List<@Valid RecipientKeyEnvelope> recipientKeys
     ) {}
     public record MessageResponse(
         UUID id, UUID senderId, String senderUsername, String content,
         String ciphertext, String iv, String salt, String signature, Integer cryptoVersion,
-        String senderKeyFingerprint, String recipientKeyFingerprint, Instant createdAt
+        String senderKeyFingerprint, String recipientKeyFingerprint,
+        List<RecipientKeyEnvelope> recipientKeys, Instant createdAt
     ) {}
     public record ConversationResponse(UUID id, ProfileResponse otherProfile, MessageResponse lastMessage, Instant createdAt) {}
     public record LiveSearchResponse(UUID id, String status, Instant expiresAt, ProfileResponse match) {}
@@ -87,7 +95,8 @@ public final class ApiModels {
     public record CoopMessageResponse(
         UUID id, UUID senderId, String senderUsername, String content,
         String ciphertext, String iv, String salt, String signature, Integer cryptoVersion,
-        String senderKeyFingerprint, String recipientKeyFingerprint, Instant createdAt
+        String senderKeyFingerprint, String recipientKeyFingerprint,
+        List<RecipientKeyEnvelope> recipientKeys, Instant createdAt
     ) {}
     public record VoiceMuteRequest(boolean muted) {}
     public record VoiceSignalRequest(

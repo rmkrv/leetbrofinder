@@ -89,10 +89,10 @@ Session discussion is stored with the session. Optional voice uses browser WebRT
 
 ## End-to-end encrypted messages
 
-New direct messages and cooperative-session messages are encrypted and signed in the browser before they reach the API. Each browser creates a non-exportable P-256 ECDH encryption key and ECDSA signing key in IndexedDB. Message text is protected with AES-256-GCM using a key derived from the two participants' device keys. The API stores ciphertext, authenticated encryption parameters, signatures, and public-key fingerprints; it never receives plaintext for new messages.
+New direct messages and cooperative-session messages are encrypted and signed in the browser before they reach the API. Each browser creates a non-exportable P-256 ECDH encryption key and ECDSA signing key in IndexedDB. Every message uses a fresh AES-256-GCM content key, which is separately wrapped for all registered devices belonging to both participants. The API stores ciphertext, authenticated encryption parameters, signatures, and wrapped keys; it never receives plaintext or content keys.
 
-Public keys are immutable after first registration, and the browser pins a partner's first-seen fingerprint. The UI exposes the full fingerprint as a safety code. Existing rows from before migration V7 remain readable as visibly labeled legacy unencrypted messages; they are not silently deleted or rewritten.
+Device keys are immutable after registration, and the browser pins a partner's known device fingerprints. Existing version 1 encrypted messages remain readable on the original device, and rows from before migration V7 remain readable as visibly labeled legacy unencrypted messages; they are not silently deleted or rewritten.
 
-The current v1 design is intentionally single-browser. Clearing browser storage or moving to a new browser loses access to that account's encrypted history, and there is no key recovery or multi-device synchronization yet. It also does not implement a Signal-style forward-secrecy ratchet; those capabilities require a separate device and key-backup design.
+New browsers register as additional recipients, so future messages can be read on every registered device. A newly added device cannot decrypt older messages that were created before its key existed, and clearing browser storage still loses that device's private keys. The design does not include key backup or a Signal-style forward-secrecy ratchet.
 
 Authenticated profile actions use an opaque session token in the internal `X-Profile-Key` header. The token is managed by the frontend and is never presented as a user credential. API responses are rate-limited per client IP.

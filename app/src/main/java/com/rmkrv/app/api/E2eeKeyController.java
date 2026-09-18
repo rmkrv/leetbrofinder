@@ -4,8 +4,8 @@ import com.rmkrv.app.api.ApiModels.E2eeKeyBundleResponse;
 import com.rmkrv.app.api.ApiModels.RegisterE2eeKeysRequest;
 import com.rmkrv.app.service.E2eeKeyService;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -23,10 +23,9 @@ public class E2eeKeyController {
     }
 
     @GetMapping("/{profileId}")
-    public ResponseEntity<E2eeKeyBundleResponse> get(
+    public List<E2eeKeyBundleResponse> get(
             @RequestHeader(value = "X-Profile-Key", required = false) String sessionKey,
             @PathVariable UUID profileId) {
-        E2eeKeyBundleResponse result = keys.get(sessionKey, profileId);
-        return result == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(result);
+        return keys.get(sessionKey, profileId);
     }
 }

@@ -167,7 +167,7 @@ public class CoopSessionService {
         item.ciphertext = request.ciphertext(); item.encryptionIv = request.iv(); item.encryptionSalt = request.salt();
         item.signature = request.signature(); item.cryptoVersion = request.cryptoVersion();
         item.senderKeyFingerprint = request.senderKeyFingerprint();
-        item.recipientKeyFingerprint = request.recipientKeyFingerprint();
+        item.recipientKeyEnvelopes = e2ee.encodeRecipients(request.recipientKeys());
         return message(messages.save(item));
     }
 
@@ -206,7 +206,8 @@ public class CoopSessionService {
     private CoopMessageResponse message(CoopSessionMessage m) {
         return new CoopMessageResponse(m.id, m.sender.id, m.sender.leetcodeUsername, m.content,
             m.ciphertext, m.encryptionIv, m.encryptionSalt, m.signature, m.cryptoVersion,
-            m.senderKeyFingerprint, m.recipientKeyFingerprint, m.createdAt);
+            m.senderKeyFingerprint, m.recipientKeyFingerprint,
+            e2ee.decodeRecipients(m.recipientKeyEnvelopes), m.createdAt);
     }
 
     private CoopSessionResponse response(CoopSession session, Profile me) {
