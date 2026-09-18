@@ -360,9 +360,3 @@ export async function getE2eeFingerprint(profileId: string): Promise<string | nu
   const bundles = await loadBundles(profileId, true)
   return bundles.length ? sha256Hex(bundles.map(bundle => bundle.fingerprint).sort().join('\n')) : null
 }
-
-export function formatFingerprint(fingerprint: string): string {
-  const groups = fingerprint.replace(/\s/g, '').toUpperCase().slice(0, 16).match(/.{1,4}/g)
-  if (!groups?.length) return fingerprint
-  return groups.length > 2 ? `${groups.slice(0, 2).join(' ')} · ${groups.slice(2).join(' ')}` : groups.join(' ')
-}

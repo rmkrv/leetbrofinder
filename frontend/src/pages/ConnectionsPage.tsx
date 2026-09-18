@@ -146,7 +146,7 @@ export default function ConnectionsPage() {
         })}
       </div>
 
-      {items.length === 0 && <div className="surface empty-state"><Users/><h3>No connections yet</h3><p>Start a shared session, then send your coding partner a request.</p><Link className="primary" to="/session">Find someone</Link></div>}
+      {items.length === 0 && <div className="surface empty-state"><Users/><h3>No connections yet</h3><p>Start a shared session, then send your coding partner a request.</p><Link className="primary" to="/session">Start a session</Link></div>}
     </main>
   )
 }

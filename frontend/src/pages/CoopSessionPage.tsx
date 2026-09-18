@@ -15,7 +15,7 @@ type DisplayCoopMessage = Decrypted<CoopMessage>
 export default function CoopSessionPage() {
   const [session, setSession] = useState<CoopSession | null>(null)
   const [messages, setMessages] = useState<DisplayCoopMessage[]>([])
-  const [partnerFingerprint, setPartnerFingerprint] = useState<string | null>(null)
+  const [messagingReady, setMessagingReady] = useState(false)
   const [message, setMessage] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [busy, setBusy] = useState(false)
@@ -43,7 +43,7 @@ export default function CoopSessionPage() {
   useEffect(() => {
     if (!session || !myId || !session.partner || !['NEGOTIATING', 'ACTIVE'].includes(session.state)) return
     let stopped = false
-    setPartnerFingerprint(null)
+    setMessagingReady(false)
     const partnerId = session.partner.id
     const load = async () => {
       try {
@@ -51,7 +51,7 @@ export default function CoopSessionPage() {
         const [items, fingerprint] = await Promise.all([getCoopMessages(session.id), getE2eeFingerprint(partnerId)])
         const decrypted = await Promise.all(items.map(item =>
           decryptMessage('coop-session', session.id, myId, partnerId, item)))
-        if (!stopped) { setMessages(decrypted); setPartnerFingerprint(fingerprint) }
+        if (!stopped) { setMessages(decrypted); setMessagingReady(Boolean(fingerprint)) }
       } catch (cause) {
         if (!stopped) setError(cause instanceof Error ? cause.message : 'Could not load session messages')
       }
@@ -110,16 +110,16 @@ export default function CoopSessionPage() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not send connection request') }
     finally { setBusy(false) }
   }
-  const reset = () => { localStorage.removeItem(SESSION_KEY); setSession(null); setMessages([]); setPartnerFingerprint(null); setNotice(''); setError('') }
+  const reset = () => { localStorage.removeItem(SESSION_KEY); setSession(null); setMessages([]); setMessagingReady(false); setNotice(''); setError('') }
 
   if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><Users size={30}/><h2>Log in to find a coding partner</h2><p>Shared sessions use your verified LeetCode profile.</p><Link className="primary" to="/login">Log in</Link></div></main>
 
   const rerollMine = Boolean(session?.rerollRequestedById && session.rerollRequestedById === myId)
 
   return <main className="coop-page">
-    <div className="page-heading center"><p className="eyebrow">Live practice, together</p><h1>Find someone</h1><p>Pair with someone around your level, agree on a problem, and work through it together on LeetCode.</p></div>
+    <div className="page-heading center"><p className="eyebrow">Live practice, together</p><h1>Practice with a partner</h1><p>Pair with someone around your level, agree on a problem, and work through it together on LeetCode.</p></div>
 
-    {!session && <section className="surface session-lobby"><div className="session-icon"><Users/></div><h2>Start a shared coding session</h2><p>We’ll look for a verified user with a reasonably similar contest rating. There are no winners, scores, or timers.</p>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={busy} onClick={findSomeone}>{busy ? <LoaderCircle className="spin"/> : <Users size={17}/>} Find someone</button></section>}
+    {!session && <section className="surface session-lobby"><div className="session-icon"><Users/></div><h2>Start a shared coding session</h2><p>We’ll look for a verified user with a reasonably similar contest rating. There are no winners, scores, or timers.</p>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={busy} onClick={findSomeone}>{busy ? <LoaderCircle className="spin"/> : <Users size={17}/>} Start matching</button></section>}
 
     {session?.state === 'SEARCHING' && <section className="surface session-lobby"><div className="radar searching"><LoaderCircle/></div><p className="eyebrow">Looking nearby</p><h2>Searching for a coding partner…</h2><p>You can leave this page open. Your shared session appears as soon as someone joins.</p><button className="secondary" disabled={busy} onClick={leave}><LogOut size={16}/> Leave queue</button></section>}
 
@@ -144,11 +144,11 @@ export default function CoopSessionPage() {
 
       <aside className="session-side">
         <VoicePanel session={session} voice={voice}/>
-        <section className="surface discussion"><div><p className="eyebrow">Discussion</p><h3>Session notes</h3></div><div className="session-messages">{messages.map(item => <div key={item.id} className={item.senderId === myId ? 'mine' : ''}><strong>{item.senderId === myId ? 'You' : item.senderUsername}</strong><p>{item.displayContent}</p>{item.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}</div>)}{messages.length === 0 && <p className="chat-empty">Say hello, share a hint, or compare complexity.</p>}</div><form onSubmit={chat}><input maxLength={1000} value={message} onChange={e => setMessage(e.target.value)} placeholder={partnerFingerprint ? 'Write a message…' : 'Messaging isn’t ready yet…'}/><button className="primary" disabled={!message.trim() || !partnerFingerprint} aria-label="Send message"><Send size={16}/></button></form></section>
+        <section className="surface discussion"><div><p className="eyebrow">Discussion</p><h3>Session notes</h3></div><div className="session-messages">{messages.map(item => <div key={item.id} className={item.senderId === myId ? 'mine' : ''}><strong>{item.senderId === myId ? 'You' : item.senderUsername}</strong><p>{item.displayContent}</p>{item.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}</div>)}{messages.length === 0 && <p className="chat-empty">Say hello, share a hint, or compare complexity.</p>}</div><form onSubmit={chat}><input maxLength={1000} value={message} onChange={e => setMessage(e.target.value)} placeholder={messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'}/><button className="primary" disabled={!message.trim() || !messagingReady} aria-label="Send message"><Send size={16}/></button></form></section>
       </aside>
     </div>}
 
-    {session && ['CLOSED', 'CANCELLED'].includes(session.state) && <section className="surface session-lobby"><Users/><h2>{session.state === 'CANCELLED' ? 'Search ended' : 'Shared session closed'}</h2><p>{session.startedAt ? 'You can still connect with your coding partner.' : 'No session was started.'}</p>{notice && <p className="form-success">{notice}</p>}{error && <p className="form-error">{error}</p>}<div className="control-row">{session.startedAt && session.partner && <button className="primary" disabled={busy} onClick={connect}><Handshake size={17}/> Connect with player</button>}<button className="secondary" onClick={reset}>Find someone else</button></div></section>}
+    {session && ['CLOSED', 'CANCELLED'].includes(session.state) && <section className="surface session-lobby"><Users/><h2>{session.state === 'CANCELLED' ? 'Search ended' : 'Shared session closed'}</h2><p>{session.startedAt ? 'You can still connect with your coding partner.' : 'No session was started.'}</p>{notice && <p className="form-success">{notice}</p>}{error && <p className="form-error">{error}</p>}<div className="control-row">{session.startedAt && session.partner && <button className="primary" disabled={busy} onClick={connect}><Handshake size={17}/> Connect with player</button>}<button className="secondary" onClick={reset}>Search again</button></div></section>}
   </main>
 }
 
@@ -158,7 +158,7 @@ function Player({ session }: { session: CoopSession }) {
 }
 
 function VoicePanel({ session, voice }: { session: CoopSession; voice: ReturnType<typeof useSessionVoice> }) {
-  return <section className="surface voice-panel"><div className="voice-heading"><span><Headphones size={19}/></span><div><p className="eyebrow">Voice</p><h3>Talk while you solve</h3></div></div><p className="voice-presence"><i className={session.partnerVoice.joined ? 'online' : ''}/>{session.partnerVoice.joined ? `${session.partner?.leetcodeUsername} is ${session.partnerVoice.muted ? 'muted' : 'in voice'}` : `${session.partner?.leetcodeUsername} is not in voice`}</p>{voice.error && <p className="form-error">{voice.error}</p>}{!voice.joined ? <button className="primary" onClick={voice.join}><Mic size={16}/> Join voice</button> : <div className="voice-actions"><button className="secondary" onClick={voice.toggleMute}>{voice.muted ? <MicOff size={16}/> : <Mic size={16}/>} {voice.muted ? 'Unmute' : 'Mute'}</button><button className="secondary danger" onClick={voice.leave}><LogOut size={16}/> Leave voice</button></div>}<audio ref={voice.audioRef} autoPlay/></section>
+  return <section className="surface voice-panel"><div className="voice-heading"><span><Headphones size={19}/></span><div><p className="eyebrow">Voice</p></div></div><p className="voice-presence"><i className={session.partnerVoice.joined ? 'online' : ''}/>{session.partnerVoice.joined ? `${session.partner?.leetcodeUsername} is ${session.partnerVoice.muted ? 'muted' : 'in voice'}` : `${session.partner?.leetcodeUsername} is not in voice`}</p>{voice.error && <p className="form-error">{voice.error}</p>}{!voice.joined ? <button className="primary" onClick={voice.join}><Mic size={16}/> Join voice</button> : <div className="voice-actions"><button className="secondary" onClick={voice.toggleMute}>{voice.muted ? <MicOff size={16}/> : <Mic size={16}/>} {voice.muted ? 'Unmute' : 'Mute'}</button><button className="secondary danger" onClick={voice.leave}><LogOut size={16}/> Leave voice</button></div>}<audio ref={voice.audioRef} autoPlay/></section>
 }
 
 function useSessionVoice(session: CoopSession | null, refresh: (value: CoopSession) => void) {

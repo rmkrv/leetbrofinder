@@ -1,8 +1,8 @@
-import { Lock, MessageCircle, Send } from 'lucide-react'
+import { MessageCircle, Send } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getMe, getMessages, getProfileKey, listConversations, sendMessage } from '../api'
-import { decryptMessage, encryptMessage, ensureE2eeIdentity, formatFingerprint, getE2eeFingerprint, type Decrypted } from '../e2ee'
+import { decryptMessage, encryptMessage, ensureE2eeIdentity, getE2eeFingerprint, type Decrypted } from '../e2ee'
 import type { Conversation, Message } from '../types'
 
 const displayName = (value: string | null | undefined) => value?.trim() || 'Unknown user'
@@ -15,7 +15,7 @@ export default function MessagesPage() {
   const [selected, setSelected] = useState(params.get('conversation') || '')
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [myProfileId, setMyProfileId] = useState('')
-  const [partnerFingerprint, setPartnerFingerprint] = useState<string | null>(null)
+  const [messagingReady, setMessagingReady] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState('')
 
@@ -44,13 +44,13 @@ export default function MessagesPage() {
     if (!selected || !myProfileId || !partnerId) return
     let stopped = false
     setMessages([])
-    setPartnerFingerprint(null)
+    setMessagingReady(false)
     const load = async () => {
       try {
         const [items, fingerprint] = await Promise.all([getMessages(selected), getE2eeFingerprint(partnerId)])
         const decrypted = await Promise.all(items.map(item =>
           decryptMessage('conversation', selected, myProfileId, partnerId, item)))
-        if (!stopped) { setMessages(decrypted); setPartnerFingerprint(fingerprint); setError('') }
+        if (!stopped) { setMessages(decrypted); setMessagingReady(Boolean(fingerprint)); setError('') }
       } catch (cause) {
         if (!stopped) setError(cause instanceof Error ? cause.message : 'Could not load messages')
       }
@@ -91,17 +91,17 @@ export default function MessagesPage() {
             <span><strong>{username}</strong><small>{preview}</small></span>
           </button>
         })}
-        {!conversations.length && <div className="inbox-empty"><p>No conversations yet.</p><Link to="/">Find someone to message</Link></div>}
+        {!conversations.length && <div className="inbox-empty"><p>No conversations yet.</p><Link to="/">Browse profiles</Link></div>}
       </aside>
       <section className="thread">
         {active ? <>
           <header>
             <span className="mini-avatar">{initials(active.otherProfile?.leetcodeUsername)}</span>
-            <div><strong>{displayName(active.otherProfile?.leetcodeUsername)}</strong><small>{active.otherProfile?.preferredLanguage || 'Language not set'} · {active.otherProfile?.timezone || 'Timezone not set'}</small>{partnerFingerprint && <small title={`Full fingerprint: ${partnerFingerprint}`}><Lock size={11}/> Security code: {formatFingerprint(partnerFingerprint)}</small>}</div>
+            <div><strong>{displayName(active.otherProfile?.leetcodeUsername)}</strong><small>{active.otherProfile?.preferredLanguage || 'Language not set'} · {active.otherProfile?.timezone || 'Timezone not set'}</small></div>
             {active.otherProfile?.id && <Link to={`/profiles/${active.otherProfile.id}`}>View profile</Link>}
           </header>
           <div className="message-list">{messages.map(message => <div key={message.id} className={message.senderId === active.otherProfile?.id ? 'message' : 'message mine'}><strong>{displayName(message.senderUsername)}</strong><p>{message.displayContent}</p>{message.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}<time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>)}</div>
-          <form onSubmit={submit}><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={1000} placeholder={partnerFingerprint ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label="Message"/><button aria-label="Send message" disabled={!draft.trim() || !partnerFingerprint}><Send size={18}/></button></form>
+          <form onSubmit={submit}><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={1000} placeholder={messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label="Message"/><button aria-label="Send message" disabled={!draft.trim() || !messagingReady}><Send size={18}/></button></form>
         </> : <div className="thread-empty"><MessageCircle/><h2>Pick a conversation</h2><p>Your messages will appear here.</p></div>}
       </section>
     </div>
