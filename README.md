@@ -12,7 +12,7 @@ LeetBroFinder is a small, non-commercial app for finding LeetCode practice partn
 - React + Vite + TypeScript
 - Spring Boot REST API (Java 21)
 - Neon PostgreSQL + Flyway migrations
-- LeetCode's public GraphQL endpoint with a 15-minute Caffeine cache
+- LeetCode's public GraphQL endpoint with bounded Caffeine caches for profiles and stable problem metadata
 - Vercel for the frontend and Google Cloud Run for the API
 
 ## Run locally

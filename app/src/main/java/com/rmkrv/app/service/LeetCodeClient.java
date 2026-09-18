@@ -4,6 +4,7 @@ import com.rmkrv.app.api.ApiModels.LanguageStat;
 import com.rmkrv.app.api.ApiModels.LeetCodeActivity;
 import com.rmkrv.app.api.ApiModels.LeetCodeSnapshot;
 import com.rmkrv.app.api.ApiModels.SessionProblem;
+import com.rmkrv.app.config.CacheConfig;
 import com.rmkrv.app.web.BadRequestException;
 import com.rmkrv.app.web.NotFoundException;
 import com.rmkrv.app.web.UpstreamException;
@@ -12,6 +13,8 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -72,16 +75,21 @@ public class LeetCodeClient {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final Cache problemCatalogCache;
+    private final Cache problemCache;
 
     public LeetCodeClient(ObjectMapper objectMapper,
+                          CacheManager cacheManager,
                           @Value("${leetbro.leetcode.endpoint:https://leetcode.com/graphql}") String endpoint) {
         this.restClient = RestClient.builder().baseUrl(endpoint)
             .defaultHeader("User-Agent", "LeetBroFinder/0.1 (+public-profile-fetcher)")
             .build();
         this.objectMapper = objectMapper;
+        this.problemCatalogCache = Objects.requireNonNull(cacheManager.getCache(CacheConfig.LEETCODE_PROBLEM_CATALOG));
+        this.problemCache = Objects.requireNonNull(cacheManager.getCache(CacheConfig.LEETCODE_PROBLEMS));
     }
 
-    @Cacheable(cacheNames = "leetcodeProfiles", key = "#username.toLowerCase()")
+    @Cacheable(cacheNames = CacheConfig.LEETCODE_PROFILES, key = "#username.toLowerCase()")
     public LeetCodeSnapshot fetch(String username) { return request(username); }
 
     public LeetCodeSnapshot fetchFresh(String username) { return request(username); }
@@ -118,9 +126,11 @@ public class LeetCodeClient {
     }
 
     public SessionProblem randomProblem(String excludeSlug) {
-        Map<String, Object> countResponse = graphQl(PROBLEM_COUNT_QUERY, Map.of());
-        Map<String, Object> catalog = map(map(countResponse.get("data")).get("problemsetQuestionList"));
-        int total = integer(catalog.get("totalNum"), 0);
+        int total = cached(problemCatalogCache, "total", () -> {
+            Map<String, Object> countResponse = graphQl(PROBLEM_COUNT_QUERY, Map.of());
+            Map<String, Object> catalog = map(map(countResponse.get("data")).get("problemsetQuestionList"));
+            return integer(catalog.get("totalNum"), 0);
+        });
         if (total < 1) throw new UpstreamException("LeetCode returned an empty problem catalog");
 
         for (int attempt = 0; attempt < 5; attempt++) {
@@ -130,6 +140,7 @@ public class LeetCodeClient {
             List<Map<String, Object>> results = listOfMaps(page.get("data"));
             if (results.isEmpty()) continue;
             SessionProblem chosen = problem(results.getFirst());
+            problemCache.put(chosen.titleSlug(), chosen);
             if (total == 1 || excludeSlug == null || !excludeSlug.equals(chosen.titleSlug())) return chosen;
         }
         throw new UpstreamException("Could not choose a different LeetCode problem");
@@ -146,23 +157,30 @@ public class LeetCodeClient {
             throw new BadRequestException("Use a leetcode.com/problems/... URL");
         }
         try {
-            Map<String, Object> response = graphQl(PROBLEM_SEARCH_QUERY, Map.of("search", value));
-            Map<String, Object> list = map(map(response.get("data")).get("problemsetQuestionList"));
-            List<Map<String, Object>> results = listOfMaps(list.get("data"));
-            Map<String, Object> chosen = results.stream()
-                .filter(row -> value.equalsIgnoreCase(string(row.get("title"))) || value.equalsIgnoreCase(string(row.get("titleSlug"))))
-                .findFirst().orElse(results.isEmpty() ? null : results.getFirst());
-            if (chosen == null) throw new BadRequestException("LeetCode problem not found");
-            return problem(chosen);
+            String searchKey = "search:" + value.toLowerCase(Locale.ROOT);
+            return cached(problemCache, searchKey, () -> {
+                Map<String, Object> response = graphQl(PROBLEM_SEARCH_QUERY, Map.of("search", value));
+                Map<String, Object> list = map(map(response.get("data")).get("problemsetQuestionList"));
+                List<Map<String, Object>> results = listOfMaps(list.get("data"));
+                Map<String, Object> chosen = results.stream()
+                    .filter(row -> value.equalsIgnoreCase(string(row.get("title"))) || value.equalsIgnoreCase(string(row.get("titleSlug"))))
+                    .findFirst().orElse(results.isEmpty() ? null : results.getFirst());
+                if (chosen == null) throw new BadRequestException("LeetCode problem not found");
+                SessionProblem resolved = problem(chosen);
+                problemCache.put(resolved.titleSlug(), resolved);
+                return resolved;
+            });
         } catch (BadRequestException | UpstreamException ex) { throw ex; }
         catch (Exception ex) { throw new UpstreamException("Could not look up that LeetCode problem"); }
     }
 
     private SessionProblem problemBySlug(String slug) {
-        Map<String, Object> response = graphQl(PROBLEM_QUERY, Map.of("slug", slug));
-        Map<String, Object> row = map(map(response.get("data")).get("question"));
-        if (row.isEmpty()) throw new BadRequestException("LeetCode problem not found");
-        return problem(row);
+        return cached(problemCache, slug, () -> {
+            Map<String, Object> response = graphQl(PROBLEM_QUERY, Map.of("slug", slug));
+            Map<String, Object> row = map(map(response.get("data")).get("question"));
+            if (row.isEmpty()) throw new BadRequestException("LeetCode problem not found");
+            return problem(row);
+        });
     }
 
     private SessionProblem problem(Map<String, Object> row) {
@@ -180,6 +198,15 @@ public class LeetCodeClient {
             return response;
         } catch (BadRequestException | UpstreamException ex) { throw ex; }
         catch (Exception ex) { throw new UpstreamException("Could not reach LeetCode. Please try again shortly."); }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T cached(Cache cache, String key, java.util.function.Supplier<T> loader) {
+        T existing = cache.get(key, (Class<T>) Object.class);
+        if (existing != null) return existing;
+        T loaded = loader.get();
+        cache.put(key, loaded);
+        return loaded;
     }
 
     private LeetCodeSnapshot request(String username) {
