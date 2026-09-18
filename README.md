@@ -2,12 +2,18 @@
 
 LeetBroFinder is a small, non-commercial app for finding LeetCode practice partners. Users verify ownership of a public LeetCode profile, add their practice preferences, browse compatible profiles, message each other, or open a cooperative coding session with another queued user.
 
+## Live app
+
+- Frontend: [leetbrofinder.rmkrv.com](https://leetbrofinder.rmkrv.com)
+- API health: [Cloud Run `/api/health`](https://leetbrofinder-api-830799638465.europe-central2.run.app/api/health)
+
 ## Stack
 
 - React + Vite + TypeScript
 - Spring Boot REST API (Java 21)
-- PostgreSQL + Flyway migrations
+- Neon PostgreSQL + Flyway migrations
 - LeetCode's public GraphQL endpoint with a 15-minute Caffeine cache
+- Vercel for the frontend and Google Cloud Run for the API
 
 ## Run locally
 
@@ -49,6 +55,16 @@ Copy `.env.example` values into your environment as needed. The frontend proxies
 The Spring Boot API reads `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. For Neon, use a direct JDBC URL (`jdbc:postgresql://...`) so the same connection can safely run Flyway migrations at startup. No database credentials are stored in application configuration or source control.
 
 For local Docker Compose, set `POSTGRES_PASSWORD` for the container and export the `DB_*` values shown in `.env.example` before starting Spring Boot.
+
+## Production deployment
+
+The frontend is deployed from the `frontend` directory on Vercel with:
+
+```text
+VITE_API_URL=https://leetbrofinder-api-830799638465.europe-central2.run.app
+```
+
+The API runs as the public Cloud Run service `leetbrofinder-api` in `europe-central2`. It scales from zero to a maximum of one instance with 1 CPU and 512 MiB of memory. Database credentials are supplied through Google Secret Manager and are never stored in the repository.
 
 ## API highlights
 
