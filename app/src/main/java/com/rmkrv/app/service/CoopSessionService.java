@@ -16,14 +16,15 @@ public class CoopSessionService {
     private final CoopSessionRepository sessions;
     private final CoopSessionMessageRepository messages;
     private final ProfileAuthService auth;
-    private final SessionProblemSelector selector;
     private final LeetCodeClient leetCode;
     private final VoiceChannelService voice;
+    private final E2eeKeyService e2ee;
 
     public CoopSessionService(CoopSessionRepository sessions, CoopSessionMessageRepository messages,
-            ProfileAuthService auth, SessionProblemSelector selector, LeetCodeClient leetCode, VoiceChannelService voice) {
-        this.sessions = sessions; this.messages = messages; this.auth = auth; this.selector = selector;
-        this.leetCode = leetCode; this.voice = voice;
+            ProfileAuthService auth, LeetCodeClient leetCode,
+            VoiceChannelService voice, E2eeKeyService e2ee) {
+        this.sessions = sessions; this.messages = messages; this.auth = auth;
+        this.leetCode = leetCode; this.voice = voice; this.e2ee = e2ee;
     }
 
     @Transactional
@@ -40,7 +41,7 @@ public class CoopSessionService {
             .min(Comparator.comparingDouble(session -> ratingDistance(me, session.playerOne))).orElse(null);
         if (candidate != null) {
             candidate.playerTwo = me;
-            applyProblem(candidate, selector.choose(me, candidate.playerOne, null), null);
+            applyProblem(candidate, leetCode.randomProblem(null), null);
             candidate.state = CoopSessionState.NEGOTIATING;
             return response(sessions.save(candidate), me);
         }
@@ -79,7 +80,7 @@ public class CoopSessionService {
         session.state = CoopSessionState.NEGOTIATING;
         session.createdAt = now;
         session.queueExpiresAt = now.plus(Duration.ofMinutes(10));
-        applyProblem(session, selector.choose(requester, recipient, null), null);
+        applyProblem(session, leetCode.randomProblem(null), null);
         return sessions.save(session);
     }
 
@@ -118,7 +119,7 @@ public class CoopSessionService {
         } else if (session.rerollRequestedBy.id.equals(me.id)) {
             throw new BadRequestException("Waiting for your partner to agree to the reroll");
         } else {
-            applyProblem(session, selector.choose(session.playerOne, session.playerTwo, session.problemSlug), null);
+            applyProblem(session, leetCode.randomProblem(session.problemSlug), null);
             session.rerollRequestedBy = null; session.rerollRequestedAt = null; session.lastRerollAt = now;
         }
         return response(sessions.save(session), me);
@@ -128,7 +129,7 @@ public class CoopSessionService {
     public CoopSessionResponse suggest(String key, UUID id, String input) {
         Profile me = auth.requireComplete(key);
         CoopSession session = negotiating(id, me);
-        SessionProblem problem = selector.find(input).orElseGet(() -> leetCode.resolveProblem(input));
+        SessionProblem problem = leetCode.resolveProblem(input);
         applyProblem(session, problem, me);
         session.rerollRequestedBy = null; session.rerollRequestedAt = null;
         return response(sessions.save(session), me);
@@ -153,13 +154,20 @@ public class CoopSessionService {
     }
 
     @Transactional
-    public CoopMessageResponse send(String key, UUID id, String content) {
+    public CoopMessageResponse send(String key, UUID id, EncryptedMessageRequest request) {
         Profile me = auth.requireComplete(key);
         CoopSession session = requireParticipant(sessions.findById(id).orElseThrow(() -> new NotFoundException("Session not found")), me);
         if (session.state == CoopSessionState.SEARCHING || session.state == CoopSessionState.CLOSED || session.state == CoopSessionState.CANCELLED) {
             throw new BadRequestException("Discussion is not available in this session");
         }
-        CoopSessionMessage item = new CoopSessionMessage(); item.session = session; item.sender = me; item.content = content.trim();
+        Profile recipient = partner(session, me);
+        e2ee.validateEnvelope(me, recipient, request);
+        CoopSessionMessage item = new CoopSessionMessage();
+        item.session = session; item.sender = me;
+        item.ciphertext = request.ciphertext(); item.encryptionIv = request.iv(); item.encryptionSalt = request.salt();
+        item.signature = request.signature(); item.cryptoVersion = request.cryptoVersion();
+        item.senderKeyFingerprint = request.senderKeyFingerprint();
+        item.recipientKeyFingerprint = request.recipientKeyFingerprint();
         return message(messages.save(item));
     }
 
@@ -195,7 +203,11 @@ public class CoopSessionService {
     private Profile partner(CoopSession session, Profile me) { return session.playerTwo == null ? null : session.playerOne.id.equals(me.id) ? session.playerTwo : session.playerOne; }
     private double ratingDistance(Profile a, Profile b) { return Math.abs((a.contestRating == null ? 1500 : a.contestRating) - (b.contestRating == null ? 1500 : b.contestRating)); }
     private SessionPlayer player(Profile p) { return p == null ? null : new SessionPlayer(p.id, p.leetcodeUsername, p.avatarUrl, p.contestRating); }
-    private CoopMessageResponse message(CoopSessionMessage m) { return new CoopMessageResponse(m.id, m.sender.id, m.sender.leetcodeUsername, m.content, m.createdAt); }
+    private CoopMessageResponse message(CoopSessionMessage m) {
+        return new CoopMessageResponse(m.id, m.sender.id, m.sender.leetcodeUsername, m.content,
+            m.ciphertext, m.encryptionIv, m.encryptionSalt, m.signature, m.cryptoVersion,
+            m.senderKeyFingerprint, m.recipientKeyFingerprint, m.createdAt);
+    }
 
     private CoopSessionResponse response(CoopSession session, Profile me) {
         Profile partner = partner(session, me);

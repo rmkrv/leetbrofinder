@@ -1,4 +1,4 @@
-import type { ActivityType, AuthResult, Availability, Challenge, Connection, Conversation, CoopMessage, CoopSession, LiveSearch, Message, PageResponse, Profile, SessionInvite, VoiceSignal } from './types'
+import type { ActivityType, AuthResult, Availability, Challenge, Connection, Conversation, CoopMessage, CoopSession, E2eeKeyBundle, EncryptedMessagePayload, LiveSearch, Message, PageResponse, Profile, SessionInvite, VoiceSignal } from './types'
 const KEY_NAME = 'leetbrofinder.profile-key'
 const CHALLENGE_NAME = 'leetbrofinder.verification-challenge'
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
@@ -64,7 +64,9 @@ export async function logout() {
 export const listConversations = () => request<Conversation[]>('/api/conversations')
 export const startConversation = (targetProfileId: string) => request<Conversation>('/api/conversations', { method: 'POST', body: JSON.stringify({ targetProfileId }) })
 export const getMessages = (id: string) => request<Message[]>(`/api/conversations/${id}/messages`)
-export const sendMessage = (id: string, content: string) => request<Message>(`/api/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ content }) })
+export const sendMessage = (id: string, payload: EncryptedMessagePayload) => request<Message>(`/api/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify(payload) })
+export const getE2eeKeyBundle = async (profileId: string) => (await request<E2eeKeyBundle | undefined>(`/api/e2ee/keys/${profileId}`)) ?? null
+export const registerE2eeKeys = (encryptionPublicKey: string, signingPublicKey: string) => request<E2eeKeyBundle>('/api/e2ee/keys/me', { method: 'PUT', body: JSON.stringify({ encryptionPublicKey, signingPublicKey }) })
 export const joinLiveSearch = () => request<LiveSearch>('/api/live-search', { method: 'POST' })
 export const getLiveSearch = (id: string) => request<LiveSearch>(`/api/live-search/${id}`)
 export const cancelLiveSearch = (id: string) => request<void>(`/api/live-search/${id}`, { method: 'DELETE' })
@@ -76,7 +78,7 @@ export const rerollCoopProblem = (id: string) => request<CoopSession>(`/api/coop
 export const suggestCoopProblem = (id: string, problem: string) => request<CoopSession>(`/api/coop-sessions/${id}/suggest`, { method: 'POST', body: JSON.stringify({ problem }) })
 export const leaveCoopSession = (id: string) => request<CoopSession>(`/api/coop-sessions/${id}/leave`, { method: 'POST' })
 export const getCoopMessages = (id: string) => request<CoopMessage[]>(`/api/coop-sessions/${id}/messages`)
-export const sendCoopMessage = (id: string, content: string) => request<CoopMessage>(`/api/coop-sessions/${id}/messages`, { method: 'POST', body: JSON.stringify({ content }) })
+export const sendCoopMessage = (id: string, payload: EncryptedMessagePayload) => request<CoopMessage>(`/api/coop-sessions/${id}/messages`, { method: 'POST', body: JSON.stringify(payload) })
 export const joinSessionVoice = (id: string) => request<void>(`/api/coop-sessions/${id}/voice/join`, { method: 'POST' })
 export const leaveSessionVoice = (id: string) => request<void>(`/api/coop-sessions/${id}/voice/leave`, { method: 'POST' })
 export const muteSessionVoice = (id: string, muted: boolean) => request<void>(`/api/coop-sessions/${id}/voice/mute`, { method: 'POST', body: JSON.stringify({ muted }) })

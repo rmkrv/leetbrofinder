@@ -55,6 +55,20 @@ public class LeetCodeClient {
           ) { data { title titleSlug difficulty } }
         }
         """;
+    private static final String PROBLEM_COUNT_QUERY = """
+        query LeetBroProblemCount {
+          problemsetQuestionList: questionList(
+            categorySlug: "", limit: 1, skip: 0, filters: {}
+          ) { totalNum }
+        }
+        """;
+    private static final String RANDOM_PROBLEM_QUERY = """
+        query LeetBroRandomProblem($skip: Int!) {
+          problemsetQuestionList: questionList(
+            categorySlug: "", limit: 1, skip: $skip, filters: {}
+          ) { data { title titleSlug difficulty } }
+        }
+        """;
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -101,6 +115,24 @@ public class LeetCodeClient {
         Set<String> slugs = new HashSet<>();
         fetchAcceptedSubmissionsFresh(username, 5000).forEach(item -> slugs.add(item.titleSlug()));
         return slugs;
+    }
+
+    public SessionProblem randomProblem(String excludeSlug) {
+        Map<String, Object> countResponse = graphQl(PROBLEM_COUNT_QUERY, Map.of());
+        Map<String, Object> catalog = map(map(countResponse.get("data")).get("problemsetQuestionList"));
+        int total = integer(catalog.get("totalNum"), 0);
+        if (total < 1) throw new UpstreamException("LeetCode returned an empty problem catalog");
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            int skip = java.util.concurrent.ThreadLocalRandom.current().nextInt(total);
+            Map<String, Object> response = graphQl(RANDOM_PROBLEM_QUERY, Map.of("skip", skip));
+            Map<String, Object> page = map(map(response.get("data")).get("problemsetQuestionList"));
+            List<Map<String, Object>> results = listOfMaps(page.get("data"));
+            if (results.isEmpty()) continue;
+            SessionProblem chosen = problem(results.getFirst());
+            if (total == 1 || excludeSlug == null || !excludeSlug.equals(chosen.titleSlug())) return chosen;
+        }
+        throw new UpstreamException("Could not choose a different LeetCode problem");
     }
 
     public SessionProblem resolveProblem(String input) {

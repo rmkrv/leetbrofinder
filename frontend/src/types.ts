@@ -6,7 +6,10 @@ export interface Profile { id: string; leetcodeUsername: string; preferredLangua
 export interface PageResponse<T> { content: T[]; totalElements: number; totalPages: number; number: number }
 export interface Challenge { challengeId: string; username: string; token: string; expiresAt: string }
 export interface AuthResult { profile: Profile; sessionToken: string; expiresAt: string }
-export interface Message { id: string; senderId: string; senderUsername: string; content: string; createdAt: string }
+export interface E2eeKeyBundle { profileId: string; encryptionPublicKey: string; signingPublicKey: string; fingerprint: string; version: number; createdAt: string }
+export interface EncryptedMessagePayload { ciphertext: string; iv: string; salt: string; signature: string; cryptoVersion: 1; senderKeyFingerprint: string; recipientKeyFingerprint: string }
+export interface EncryptedMessageEnvelope extends Partial<EncryptedMessagePayload> { content: string | null }
+export interface Message extends EncryptedMessageEnvelope { id: string; senderId: string; senderUsername: string; createdAt: string }
 export interface Conversation { id: string; otherProfile: Profile; lastMessage: Message | null; createdAt: string }
 export interface LiveSearch { id: string; status: 'SEARCHING' | 'MATCHED' | 'CANCELLED' | 'EXPIRED'; expiresAt: string; match: Profile | null }
 export type CoopSessionState = 'SEARCHING' | 'NEGOTIATING' | 'ACTIVE' | 'CLOSED' | 'CANCELLED'
@@ -14,7 +17,7 @@ export interface SessionPlayer { id: string; leetcodeUsername: string; avatarUrl
 export interface SessionProblem { title: string; titleSlug: string; difficulty: 'Easy' | 'Medium' | 'Hard'; url: string }
 export interface VoicePresence { joined: boolean; muted: boolean }
 export interface CoopSession { id: string; state: CoopSessionState; playerOne: SessionPlayer; playerTwo: SessionPlayer | null; partner: SessionPlayer | null; problem: SessionProblem | null; proposedById: string | null; myAccepted: boolean; partnerAccepted: boolean; rerollRequestedById: string | null; queueExpiresAt: string; startedAt: string | null; closedAt: string | null; closedById: string | null; voiceInitiator: boolean; myVoice: VoicePresence; partnerVoice: VoicePresence }
-export interface CoopMessage { id: string; senderId: string; senderUsername: string; content: string; createdAt: string }
+export interface CoopMessage extends EncryptedMessageEnvelope { id: string; senderId: string; senderUsername: string; createdAt: string }
 export interface VoiceSignal { id: number; fromProfileId: string; type: 'OFFER' | 'ANSWER' | 'ICE'; payload: string }
 export interface Connection { id: string; status: 'PENDING' | 'ACCEPTED' | 'DECLINED'; direction: 'INCOMING' | 'OUTGOING'; otherProfile: Profile; createdAt: string; respondedAt: string | null }
 export interface SessionInvite { id: string; status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED'; direction: 'INCOMING' | 'OUTGOING'; otherPlayer: SessionPlayer; sessionId: string | null; createdAt: string; expiresAt: string; respondedAt: string | null }

@@ -24,6 +24,11 @@ public class Profile {
     @Column(name = "setup_complete", nullable = false) public boolean setupComplete;
     @Column(name = "owner_key_hash", nullable = false, length = 64) public String ownerKeyHash;
     @Column(name = "password_hash", length = 100) public String passwordHash;
+    @Column(name = "e2ee_encryption_public_key", columnDefinition = "TEXT") public String e2eeEncryptionPublicKey;
+    @Column(name = "e2ee_signing_public_key", columnDefinition = "TEXT") public String e2eeSigningPublicKey;
+    @Column(name = "e2ee_key_fingerprint", length = 64) public String e2eeKeyFingerprint;
+    @Column(name = "e2ee_key_version") public Integer e2eeKeyVersion;
+    @Column(name = "e2ee_key_created_at") public Instant e2eeKeyCreatedAt;
     @Column(name = "avatar_url", length = 500) public String avatarUrl;
     @Column(name = "total_solved", nullable = false) public int totalSolved;
     @Column(name = "easy_solved", nullable = false) public int easySolved;

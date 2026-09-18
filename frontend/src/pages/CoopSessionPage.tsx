@@ -6,19 +6,23 @@ import {
   joinCoopSession, joinSessionVoice, leaveCoopSession, leaveSessionVoice, muteSessionVoice,
   rerollCoopProblem, sendConnectionRequest, sendCoopMessage, sendVoiceSignal, suggestCoopProblem,
 } from '../api'
+import { decryptMessage, encryptMessage, ensureE2eeIdentity, getE2eeFingerprint, type Decrypted } from '../e2ee'
 import type { CoopMessage, CoopSession, VoiceSignal } from '../types'
 
 const SESSION_KEY = 'leetbrofinder.coop-session-id'
+type DisplayCoopMessage = Decrypted<CoopMessage>
 
 export default function CoopSessionPage() {
   const [session, setSession] = useState<CoopSession | null>(null)
-  const [messages, setMessages] = useState<CoopMessage[]>([])
+  const [messages, setMessages] = useState<DisplayCoopMessage[]>([])
+  const [partnerFingerprint, setPartnerFingerprint] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const voice = useSessionVoice(session, setSession)
+  const myId = session ? (session.voiceInitiator ? session.playerOne.id : session.playerTwo?.id) : null
 
   useEffect(() => {
     if (!getProfileKey()) return
@@ -37,12 +41,25 @@ export default function CoopSessionPage() {
   }, [session?.id, session?.state])
 
   useEffect(() => {
-    if (!session || !['NEGOTIATING', 'ACTIVE'].includes(session.state)) return
-    const load = () => getCoopMessages(session.id).then(setMessages).catch(() => {})
-    load()
+    if (!session || !myId || !session.partner || !['NEGOTIATING', 'ACTIVE'].includes(session.state)) return
+    let stopped = false
+    setPartnerFingerprint(null)
+    const partnerId = session.partner.id
+    const load = async () => {
+      try {
+        await ensureE2eeIdentity(myId)
+        const [items, fingerprint] = await Promise.all([getCoopMessages(session.id), getE2eeFingerprint(partnerId)])
+        const decrypted = await Promise.all(items.map(item =>
+          decryptMessage('coop-session', session.id, myId, partnerId, item)))
+        if (!stopped) { setMessages(decrypted); setPartnerFingerprint(fingerprint) }
+      } catch (cause) {
+        if (!stopped) setError(cause instanceof Error ? cause.message : 'Could not load session messages')
+      }
+    }
+    void load()
     const poll = window.setInterval(load, 5000)
-    return () => window.clearInterval(poll)
-  }, [session?.id, session?.state])
+    return () => { stopped = true; window.clearInterval(poll) }
+  }, [session?.id, session?.state, session?.partner?.id, myId])
 
   const act = async (operation: () => Promise<CoopSession>) => {
     setBusy(true); setError(''); setNotice('')
@@ -75,10 +92,12 @@ export default function CoopSessionPage() {
   }
   const chat = async (event: FormEvent) => {
     event.preventDefault()
-    if (!session || !message.trim()) return
+    if (!session || !session.partner || !myId || !message.trim()) return
     try {
-      const sent = await sendCoopMessage(session.id, message.trim())
-      setMessages(current => [...current.filter(item => item.id !== sent.id), sent])
+      const encrypted = await encryptMessage('coop-session', session.id, myId, session.partner.id, message.trim())
+      const sent = await sendCoopMessage(session.id, encrypted)
+      const decrypted = await decryptMessage('coop-session', session.id, myId, session.partner.id, sent)
+      setMessages(current => [...current.filter(item => item.id !== sent.id), decrypted])
       setMessage('')
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not send message') }
   }
@@ -91,11 +110,10 @@ export default function CoopSessionPage() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not send connection request') }
     finally { setBusy(false) }
   }
-  const reset = () => { localStorage.removeItem(SESSION_KEY); setSession(null); setMessages([]); setNotice(''); setError('') }
+  const reset = () => { localStorage.removeItem(SESSION_KEY); setSession(null); setMessages([]); setPartnerFingerprint(null); setNotice(''); setError('') }
 
   if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><Users size={30}/><h2>Log in to find a coding partner</h2><p>Shared sessions use your verified LeetCode profile.</p><Link className="primary" to="/login">Log in</Link></div></main>
 
-  const myId = session ? (session.voiceInitiator ? session.playerOne.id : session.playerTwo?.id) : null
   const rerollMine = Boolean(session?.rerollRequestedById && session.rerollRequestedById === myId)
 
   return <main className="coop-page">
@@ -126,7 +144,7 @@ export default function CoopSessionPage() {
 
       <aside className="session-side">
         <VoicePanel session={session} voice={voice}/>
-        <section className="surface discussion"><div><p className="eyebrow">Discussion</p><h3>Session notes</h3></div><div className="session-messages">{messages.map(item => <div key={item.id} className={item.senderId === myId ? 'mine' : ''}><strong>{item.senderId === myId ? 'You' : item.senderUsername}</strong><p>{item.content}</p></div>)}{messages.length === 0 && <p className="chat-empty">Say hello, share a hint, or compare complexity.</p>}</div><form onSubmit={chat}><input maxLength={1000} value={message} onChange={e => setMessage(e.target.value)} placeholder="Write a message…"/><button className="primary" disabled={!message.trim()} aria-label="Send message"><Send size={16}/></button></form></section>
+        <section className="surface discussion"><div><p className="eyebrow">Discussion</p><h3>Session notes</h3></div><div className="session-messages">{messages.map(item => <div key={item.id} className={item.senderId === myId ? 'mine' : ''}><strong>{item.senderId === myId ? 'You' : item.senderUsername}</strong><p>{item.displayContent}</p>{item.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}</div>)}{messages.length === 0 && <p className="chat-empty">Say hello, share a hint, or compare complexity.</p>}</div><form onSubmit={chat}><input maxLength={1000} value={message} onChange={e => setMessage(e.target.value)} placeholder={partnerFingerprint ? 'Write a message…' : 'Messaging isn’t ready yet…'}/><button className="primary" disabled={!message.trim() || !partnerFingerprint} aria-label="Send message"><Send size={16}/></button></form></section>
       </aside>
     </div>}
 
@@ -140,7 +158,7 @@ function Player({ session }: { session: CoopSession }) {
 }
 
 function VoicePanel({ session, voice }: { session: CoopSession; voice: ReturnType<typeof useSessionVoice> }) {
-  return <section className="surface voice-panel"><div className="voice-heading"><span><Headphones size={19}/></span><div><p className="eyebrow">Optional voice</p><h3>Talk while you solve</h3></div></div><p className="voice-presence"><i className={session.partnerVoice.joined ? 'online' : ''}/>{session.partnerVoice.joined ? `${session.partner?.leetcodeUsername} is ${session.partnerVoice.muted ? 'muted' : 'in voice'}` : `${session.partner?.leetcodeUsername} is not in voice`}</p>{voice.error && <p className="form-error">{voice.error}</p>}{!voice.joined ? <button className="primary" onClick={voice.join}><Mic size={16}/> Join voice</button> : <div className="voice-actions"><button className="secondary" onClick={voice.toggleMute}>{voice.muted ? <MicOff size={16}/> : <Mic size={16}/>} {voice.muted ? 'Unmute' : 'Mute'}</button><button className="secondary danger" onClick={voice.leave}><LogOut size={16}/> Leave voice</button></div>}<audio ref={voice.audioRef} autoPlay/></section>
+  return <section className="surface voice-panel"><div className="voice-heading"><span><Headphones size={19}/></span><div><p className="eyebrow">Voice</p><h3>Talk while you solve</h3></div></div><p className="voice-presence"><i className={session.partnerVoice.joined ? 'online' : ''}/>{session.partnerVoice.joined ? `${session.partner?.leetcodeUsername} is ${session.partnerVoice.muted ? 'muted' : 'in voice'}` : `${session.partner?.leetcodeUsername} is not in voice`}</p>{voice.error && <p className="form-error">{voice.error}</p>}{!voice.joined ? <button className="primary" onClick={voice.join}><Mic size={16}/> Join voice</button> : <div className="voice-actions"><button className="secondary" onClick={voice.toggleMute}>{voice.muted ? <MicOff size={16}/> : <Mic size={16}/>} {voice.muted ? 'Unmute' : 'Mute'}</button><button className="secondary danger" onClick={voice.leave}><LogOut size={16}/> Leave voice</button></div>}<audio ref={voice.audioRef} autoPlay/></section>
 }
 
 function useSessionVoice(session: CoopSession | null, refresh: (value: CoopSession) => void) {

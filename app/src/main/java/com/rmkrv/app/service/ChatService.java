@@ -17,11 +17,12 @@ public class ChatService {
     private final ProfileRepository profiles;
     private final ProfileAuthService auth;
     private final ProfileMapper mapper;
+    private final E2eeKeyService e2ee;
 
     public ChatService(ConversationRepository conversations, MessageRepository messages, ProfileRepository profiles,
-            ProfileAuthService auth, ProfileMapper mapper) {
+            ProfileAuthService auth, ProfileMapper mapper, E2eeKeyService e2ee) {
         this.conversations = conversations; this.messages = messages; this.profiles = profiles;
-        this.auth = auth; this.mapper = mapper;
+        this.auth = auth; this.mapper = mapper; this.e2ee = e2ee;
     }
 
     @Transactional
@@ -50,10 +51,17 @@ public class ChatService {
     }
 
     @Transactional
-    public MessageResponse send(String key, UUID conversationId, String content) {
+    public MessageResponse send(String key, UUID conversationId, EncryptedMessageRequest request) {
         Profile me = auth.requireComplete(key);
         Conversation c = requireMember(conversationId, me);
-        Message m = new Message(); m.conversation = c; m.sender = me; m.content = content.trim();
+        Profile recipient = c.profileA.id.equals(me.id) ? c.profileB : c.profileA;
+        e2ee.validateEnvelope(me, recipient, request);
+        Message m = new Message();
+        m.conversation = c; m.sender = me;
+        m.ciphertext = request.ciphertext(); m.encryptionIv = request.iv(); m.encryptionSalt = request.salt();
+        m.signature = request.signature(); m.cryptoVersion = request.cryptoVersion();
+        m.senderKeyFingerprint = request.senderKeyFingerprint();
+        m.recipientKeyFingerprint = request.recipientKeyFingerprint();
         return message(messages.save(m));
     }
 
@@ -67,5 +75,9 @@ public class ChatService {
         MessageResponse last = messages.findFirstByConversationIdOrderByCreatedAtDesc(c.id).map(this::message).orElse(null);
         return new ConversationResponse(c.id, mapper.toPublicResponse(other), last, c.createdAt);
     }
-    private MessageResponse message(Message m) { return new MessageResponse(m.id, m.sender.id, m.sender.leetcodeUsername, m.content, m.createdAt); }
+    private MessageResponse message(Message m) {
+        return new MessageResponse(m.id, m.sender.id, m.sender.leetcodeUsername, m.content,
+            m.ciphertext, m.encryptionIv, m.encryptionSalt, m.signature, m.cryptoVersion,
+            m.senderKeyFingerprint, m.recipientKeyFingerprint, m.createdAt);
+    }
 }

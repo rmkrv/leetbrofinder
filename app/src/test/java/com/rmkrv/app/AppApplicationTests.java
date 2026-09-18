@@ -1,5 +1,8 @@
 package com.rmkrv.app;
 
+import com.rmkrv.app.api.ApiModels.EncryptedMessageRequest;
+import com.rmkrv.app.api.ApiModels.RegisterE2eeKeysRequest;
+import com.rmkrv.app.api.ApiModels.SessionProblem;
 import com.rmkrv.app.api.ApiModels.UpdateProfileRequest;
 import com.rmkrv.app.domain.ActivityType;
 import com.rmkrv.app.domain.Availability;
@@ -17,6 +20,7 @@ import com.rmkrv.app.repository.ConnectionRepository;
 import com.rmkrv.app.service.ChatService;
 import com.rmkrv.app.service.ConnectionService;
 import com.rmkrv.app.service.CoopSessionService;
+import com.rmkrv.app.service.E2eeKeyService;
 import com.rmkrv.app.service.LeetCodeClient;
 import com.rmkrv.app.service.LiveSearchService;
 import com.rmkrv.app.service.ProfileAuthService;
@@ -37,6 +41,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 class AppApplicationTests {
@@ -50,6 +55,7 @@ class AppApplicationTests {
 	@Autowired LiveSearchRepository liveSearches;
 	@Autowired LiveSearchService liveSearch;
 	@Autowired CoopSessionService coopSessions;
+	@Autowired E2eeKeyService e2eeKeys;
 	@Autowired CoopSessionRepository coopSessionRepository;
 	@Autowired ConnectionService connectionService;
 	@Autowired ConnectionRepository connectionRepository;
@@ -168,6 +174,50 @@ class AppApplicationTests {
 
 	@Test
 	@Transactional
+	void registersImmutablePublicEncryptionKeys() {
+		Profile profile = sessionProfile("encryptedUser", "encrypted#1234", 1500);
+		profiles.saveAndFlush(profile);
+		var session = auth.createSession(profile, false);
+		String encryptionKey = publicJwk("a");
+		String signingKey = publicJwk("b");
+
+		var registered = e2eeKeys.register(session.sessionToken(), new RegisterE2eeKeysRequest(encryptionKey, signingKey));
+		assertThat(registered.profileId()).isEqualTo(profile.id);
+		assertThat(registered.fingerprint()).hasSize(64);
+		assertThat(e2eeKeys.get(session.sessionToken(), profile.id).fingerprint()).isEqualTo(registered.fingerprint());
+		assertThatThrownBy(() -> e2eeKeys.register(session.sessionToken(),
+			new RegisterE2eeKeysRequest(publicJwk("c"), signingKey)))
+			.isInstanceOf(com.rmkrv.app.web.BadRequestException.class)
+			.hasMessageContaining("already registered");
+	}
+
+	@Test
+	@Transactional
+	void storesOnlyCiphertextForNewDirectMessages() {
+		Profile sender = sessionProfile("encryptedSender", "sender#1234", 1500);
+		Profile recipient = sessionProfile("encryptedRecipient", "recipient#1234", 1510);
+		enableE2ee(sender, "d");
+		enableE2ee(recipient, "e");
+		profiles.saveAllAndFlush(List.of(sender, recipient));
+		var session = auth.createSession(sender, false);
+		Conversation conversation = new Conversation();
+		conversation.profileA = sender;
+		conversation.profileB = recipient;
+		conversations.saveAndFlush(conversation);
+		var envelope = new EncryptedMessageRequest("ZW5jcnlwdGVk", "aXYxMjM", "c2FsdDEyMw", "c2lnbmF0dXJl",
+			1, sender.e2eeKeyFingerprint, recipient.e2eeKeyFingerprint);
+
+		var response = chat.send(session.sessionToken(), conversation.id, envelope);
+
+		assertThat(response.content()).isNull();
+		assertThat(response.ciphertext()).isEqualTo("ZW5jcnlwdGVk");
+		Message stored = messages.findById(response.id()).orElseThrow();
+		assertThat(stored.content).isNull();
+		assertThat(stored.ciphertext).isEqualTo("ZW5jcnlwdGVk");
+	}
+
+	@Test
+	@Transactional
 	void matchesAQueuedProfileAfterThePersistenceContextCloses() {
 		Profile me = new Profile();
 		me.leetcodeUsername = "queueOwner";
@@ -205,6 +255,14 @@ class AppApplicationTests {
 	void startsACooperativeSessionAndConnectsThePartners() {
 		Profile first = sessionProfile("coopFirst", "first#1234", 1600);
 		Profile second = sessionProfile("coopSecond", "second#1234", 1650);
+		var initialProblem = problem("Two Sum", "two-sum", "Easy");
+		var rerolledProblem = problem("Add Two Numbers", "add-two-numbers", "Medium");
+		var invitedProblem = problem("Median of Two Sorted Arrays", "median-of-two-sorted-arrays", "Hard");
+		when(leetCode.randomProblem(null)).thenReturn(initialProblem, invitedProblem);
+		when(leetCode.randomProblem(initialProblem.titleSlug())).thenReturn(rerolledProblem);
+		when(leetCode.resolveProblem("Two Sum")).thenReturn(initialProblem);
+		enableE2ee(first, "a");
+		enableE2ee(second, "b");
 		profiles.saveAllAndFlush(List.of(first, second));
 		var firstSession = auth.createSession(first, false);
 		var secondSession = auth.createSession(second, false);
@@ -238,8 +296,12 @@ class AppApplicationTests {
 		voice.signal(firstSession.sessionToken(), active.id(), "OFFER", "offer-sdp");
 		assertThat(voice.signals(secondSession.sessionToken(), active.id(), 0)).singleElement()
 			.satisfies(signal -> assertThat(signal.payload()).isEqualTo("offer-sdp"));
-		var message = coopSessions.send(firstSession.sessionToken(), active.id(), "Let's compare approaches after this.");
+		var encrypted = new EncryptedMessageRequest("Y2lwaGVydGV4dA", "aXYxMjM", "c2FsdDEyMw", "c2lnbmF0dXJl",
+			1, first.e2eeKeyFingerprint, second.e2eeKeyFingerprint);
+		var message = coopSessions.send(firstSession.sessionToken(), active.id(), encrypted);
 		assertThat(message.senderUsername()).isEqualTo("coopFirst");
+		assertThat(message.content()).isNull();
+		assertThat(message.ciphertext()).isEqualTo("Y2lwaGVydGV4dA");
 		assertThat(coopSessions.messages(secondSession.sessionToken(), active.id())).singleElement();
 
 		var request = connectionService.send(firstSession.sessionToken(), second.id, active.id());
@@ -283,6 +345,22 @@ class AppApplicationTests {
 		profile.contestRating = rating;
 		profile.activities.add(ActivityType.CONTESTS);
 		return profile;
+	}
+
+	private SessionProblem problem(String title, String slug, String difficulty) {
+		return new SessionProblem(title, slug, difficulty, "https://leetcode.com/problems/" + slug + "/");
+	}
+
+	private void enableE2ee(Profile profile, String digit) {
+		profile.e2eeEncryptionPublicKey = publicJwk(digit);
+		profile.e2eeSigningPublicKey = profile.e2eeEncryptionPublicKey;
+		profile.e2eeKeyFingerprint = digit.repeat(64);
+		profile.e2eeKeyVersion = 1;
+		profile.e2eeKeyCreatedAt = Instant.now();
+	}
+
+	private String publicJwk(String digit) {
+		return "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"" + digit.repeat(43) + "\",\"y\":\"" + digit.repeat(43) + "\"}";
 	}
 
 }

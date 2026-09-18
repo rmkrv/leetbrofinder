@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: leetbro
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment or ignored .env file}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - leetbro-data:/var/lib/postgresql/data
     healthcheck:

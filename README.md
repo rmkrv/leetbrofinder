@@ -77,13 +77,22 @@ The API runs as the public Cloud Run service `leetbrofinder-api` in `europe-cent
 - `POST /api/coop-sessions/queue` and `GET /api/coop-sessions/{id}`
 - `POST /api/coop-sessions/{id}/accept`, `/reroll`, `/suggest`, and `/leave`
 - `GET/POST /api/coop-sessions/{id}/messages` and the `/voice/*` signaling endpoints
+- `PUT /api/e2ee/keys/me` and `GET /api/e2ee/keys/{profileId}`
 - `GET/POST /api/connections` and `POST /api/connections/{id}/accept`
 - `GET/POST /api/conversations`
 
 ## Cooperative coding sessions
 
-The API owns the matchmaking queue and pairs users by the closest available contest rating. It suggests a random difficulty-appropriate problem. Either partner can suggest a LeetCode URL/title, and a reroll needs the other partner's agreement. The session becomes active only when both users accept the current problem. There is no timer, score, winner, or submission verification.
+The API owns the matchmaking queue and pairs users by the closest available contest rating. It reads the current LeetCode catalog size and selects a problem at a uniformly random catalog index. Either partner can suggest a LeetCode URL/title, and a reroll needs the other partner's agreement. The session becomes active only when both users accept the current problem. There is no timer, score, winner, or submission verification.
 
 Session discussion is stored with the session. Optional voice uses browser WebRTC audio and short-lived, in-memory signaling state on the API; it is not a persistent voice room. Partners can exchange connection requests after a session starts, and contact details remain hidden until the recipient accepts.
+
+## End-to-end encrypted messages
+
+New direct messages and cooperative-session messages are encrypted and signed in the browser before they reach the API. Each browser creates a non-exportable P-256 ECDH encryption key and ECDSA signing key in IndexedDB. Message text is protected with AES-256-GCM using a key derived from the two participants' device keys. The API stores ciphertext, authenticated encryption parameters, signatures, and public-key fingerprints; it never receives plaintext for new messages.
+
+Public keys are immutable after first registration, and the browser pins a partner's first-seen fingerprint. The UI exposes the full fingerprint as a safety code. Existing rows from before migration V7 remain readable as visibly labeled legacy unencrypted messages; they are not silently deleted or rewritten.
+
+The current v1 design is intentionally single-browser. Clearing browser storage or moving to a new browser loses access to that account's encrypted history, and there is no key recovery or multi-device synchronization yet. It also does not implement a Signal-style forward-secrecy ratchet; those capabilities require a separate device and key-backup design.
 
 Authenticated profile actions use an opaque session token in the internal `X-Profile-Key` header. The token is managed by the frontend and is never presented as a user credential. API responses are rate-limited per client IP.

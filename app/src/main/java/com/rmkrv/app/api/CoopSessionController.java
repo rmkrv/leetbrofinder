@@ -71,8 +71,8 @@ public class CoopSessionController {
     @PostMapping("/{id}/messages")
     @ResponseStatus(HttpStatus.CREATED)
     public CoopMessageResponse send(@RequestHeader(value = "X-Profile-Key", required = false) String key,
-            @PathVariable UUID id, @Valid @RequestBody SendMessageRequest request) {
-        return sessions.send(key, id, request.content());
+            @PathVariable UUID id, @Valid @RequestBody EncryptedMessageRequest request) {
+        return sessions.send(key, id, request);
     }
 
     @PostMapping("/{id}/voice/join")

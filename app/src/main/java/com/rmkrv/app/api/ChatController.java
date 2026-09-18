@@ -22,5 +22,5 @@ public class ChatController {
     public List<MessageResponse> messages(@RequestHeader(value = "X-Profile-Key", required = false) String key, @PathVariable UUID id) { return chat.messages(key, id); }
     @PostMapping("/{id}/messages") @ResponseStatus(HttpStatus.CREATED)
     public MessageResponse send(@RequestHeader(value = "X-Profile-Key", required = false) String key, @PathVariable UUID id,
-            @Valid @RequestBody SendMessageRequest request) { return chat.send(key, id, request.content()); }
+            @Valid @RequestBody EncryptedMessageRequest request) { return chat.send(key, id, request); }
 }

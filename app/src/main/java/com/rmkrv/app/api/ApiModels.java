@@ -49,11 +49,28 @@ public final class ApiModels {
     ) {}
     public record AuthResponse(ProfileResponse profile, String sessionToken, Instant expiresAt) {}
     public record StartConversationRequest(@NotNull UUID targetProfileId) {}
-    public record SendMessageRequest(
-        @NotBlank @Size(max = 1000)
-        @Pattern(regexp = "^[^<>\\p{Cc}]+$", message = "cannot contain HTML or control characters") String content
+    public record RegisterE2eeKeysRequest(
+        @NotBlank @Size(max = 1000) String encryptionPublicKey,
+        @NotBlank @Size(max = 1000) String signingPublicKey
     ) {}
-    public record MessageResponse(UUID id, UUID senderId, String senderUsername, String content, Instant createdAt) {}
+    public record E2eeKeyBundleResponse(
+        UUID profileId, String encryptionPublicKey, String signingPublicKey,
+        String fingerprint, int version, Instant createdAt
+    ) {}
+    public record EncryptedMessageRequest(
+        @NotBlank @Size(max = 8192) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String ciphertext,
+        @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String iv,
+        @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String salt,
+        @NotBlank @Size(max = 256) @Pattern(regexp = "^[A-Za-z0-9_-]+$") String signature,
+        @NotNull @Min(1) @Max(1) Integer cryptoVersion,
+        @NotBlank @Pattern(regexp = "^[a-f0-9]{64}$") String senderKeyFingerprint,
+        @NotBlank @Pattern(regexp = "^[a-f0-9]{64}$") String recipientKeyFingerprint
+    ) {}
+    public record MessageResponse(
+        UUID id, UUID senderId, String senderUsername, String content,
+        String ciphertext, String iv, String salt, String signature, Integer cryptoVersion,
+        String senderKeyFingerprint, String recipientKeyFingerprint, Instant createdAt
+    ) {}
     public record ConversationResponse(UUID id, ProfileResponse otherProfile, MessageResponse lastMessage, Instant createdAt) {}
     public record LiveSearchResponse(UUID id, String status, Instant expiresAt, ProfileResponse match) {}
 
@@ -67,7 +84,11 @@ public final class ApiModels {
         UUID closedById, boolean voiceInitiator, VoicePresence myVoice, VoicePresence partnerVoice
     ) {}
     public record SuggestProblemRequest(@NotBlank @Size(max = 500) String problem) {}
-    public record CoopMessageResponse(UUID id, UUID senderId, String senderUsername, String content, Instant createdAt) {}
+    public record CoopMessageResponse(
+        UUID id, UUID senderId, String senderUsername, String content,
+        String ciphertext, String iv, String salt, String signature, Integer cryptoVersion,
+        String senderKeyFingerprint, String recipientKeyFingerprint, Instant createdAt
+    ) {}
     public record VoiceMuteRequest(boolean muted) {}
     public record VoiceSignalRequest(
         @NotBlank @Pattern(regexp = "OFFER|ANSWER|ICE") String type,

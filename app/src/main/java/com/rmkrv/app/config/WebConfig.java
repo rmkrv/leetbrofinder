@@ -11,7 +11,7 @@ public class WebConfig implements WebMvcConfigurer {
         this.frontendOrigins = frontendOrigins.split("\\s*,\\s*");
     }
     @Override public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**").allowedOrigins(frontendOrigins).allowedMethods("GET", "POST", "PATCH", "DELETE")
+        registry.addMapping("/api/**").allowedOrigins(frontendOrigins).allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE")
             .allowedHeaders("Content-Type", "X-Profile-Key").allowCredentials(false).maxAge(3600);
     }
 }
