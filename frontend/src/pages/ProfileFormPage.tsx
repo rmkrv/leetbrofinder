@@ -105,7 +105,7 @@ export default function ProfileFormPage() {
   }
 
   return <main className="form-page">
-    <div className="page-heading"><p className="eyebrow">{searchParams.get('verified') ? 'Account verified' : 'Your profile'}</p><h1>{searchParams.get('verified') ? 'Nice. Now finish your account.' : 'Edit your practice profile.'}</h1><p>Your profile stays private until setup—including your password—is complete.</p></div>
+    <div className="page-heading"><p className="eyebrow">{searchParams.get('verified') ? 'Account verified' : 'Your profile'}</p><h1>{searchParams.get('verified') ? 'Nice. Now finish your account.' : 'Edit your practice profile.'}</h1></div>
     <form className="surface profile-form" onSubmit={submit} autoComplete="on">
       {username && <div className="verified-strip"><CheckCircle2 size={18}/><span><strong>{username}</strong> is verified</span></div>}
       <div className="form-grid">
