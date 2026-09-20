@@ -13,33 +13,64 @@ import {
 import type { Connection, SessionInvite } from '../types'
 
 const SESSION_KEY = 'leetbrofinder.coop-session-id'
+const REFRESH_AFTER_MS = 3000
+
+type ConnectionsSnapshot = {
+  profileKey: string
+  items: Connection[]
+  invites: SessionInvite[]
+  updatedAt: number
+}
+
+let cachedSnapshot: ConnectionsSnapshot | null = null
+let pendingLoad: { profileKey: string; promise: Promise<ConnectionsSnapshot> } | null = null
+
+const snapshotFor = (profileKey: string) => cachedSnapshot?.profileKey === profileKey ? cachedSnapshot : null
+
+const fetchSnapshot = (profileKey: string, force = false) => {
+  const cached = snapshotFor(profileKey)
+  if (!force && cached && Date.now() - cached.updatedAt < REFRESH_AFTER_MS) return Promise.resolve(cached)
+  if (pendingLoad?.profileKey === profileKey) return pendingLoad.promise
+
+  const promise = Promise.all([listConnections(), listSessionInvites()])
+    .then(([items, invites]) => {
+      const snapshot = { profileKey, items, invites, updatedAt: Date.now() }
+      cachedSnapshot = snapshot
+      return snapshot
+    })
+    .finally(() => {
+      if (pendingLoad?.promise === promise) pendingLoad = null
+    })
+
+  pendingLoad = { profileKey, promise }
+  return promise
+}
 
 export default function ConnectionsPage() {
-  const [items, setItems] = useState<Connection[]>([])
-  const [invites, setInvites] = useState<SessionInvite[]>([])
+  const profileKey = getProfileKey() || ''
+  const initialSnapshot = snapshotFor(profileKey)
+  const [items, setItems] = useState<Connection[]>(() => initialSnapshot?.items || [])
+  const [invites, setInvites] = useState<SessionInvite[]>(() => initialSnapshot?.invites || [])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busyId, setBusyId] = useState('')
   const navigate = useNavigate()
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     try {
-      const [connections, sessionInvites] = await Promise.all([
-        listConnections(),
-        listSessionInvites(),
-      ])
-      setItems(connections)
-      setInvites(sessionInvites)
+      const snapshot = await fetchSnapshot(profileKey, force)
+      setItems(snapshot.items)
+      setInvites(snapshot.invites)
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load connections')
     }
-  }, [])
+  }, [profileKey])
 
   useEffect(() => {
     if (!getProfileKey()) return
     void load()
-    const poll = window.setInterval(load, 3000)
+    const poll = window.setInterval(() => { void load(true) }, REFRESH_AFTER_MS)
     return () => window.clearInterval(poll)
   }, [load])
 
@@ -50,7 +81,8 @@ export default function ConnectionsPage() {
     try {
       await action()
       if (success) setNotice(success)
-      await load()
+      if (pendingLoad?.profileKey === profileKey) await pendingLoad.promise.catch(() => undefined)
+      await load(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed')
     } finally {
