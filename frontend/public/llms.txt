@@ -1,0 +1,27 @@
+# LeetBroFinder
+
+> LeetBroFinder is a free, non-commercial service for finding verified LeetCode practice partners at a similar skill level.
+
+LeetBroFinder helps people meet partners for LeetCode contests, problem-solving sessions, data-structures and algorithms practice, and interview preparation. It is an independent project and is not affiliated with LeetCode.
+
+## Main pages
+
+- [Browse practice partners](https://leetbrofinder.rmkrv.com/): Search verified profiles by username, contest rating, preferred programming language, activity, availability, and timezone.
+- [Create an account](https://leetbrofinder.rmkrv.com/verify): Verify ownership of a LeetCode profile using a temporary code placed in the profile's public About section. LeetBroFinder never asks for a LeetCode password, cookie, or session token.
+- [Log in](https://leetbrofinder.rmkrv.com/login): Log in with a LeetCode username and a separate LeetBroFinder password.
+- [Live session](https://leetbrofinder.rmkrv.com/session): Match with a verified user near your contest rating, agree on a LeetCode problem, and discuss approaches. Sessions have no score, winner, or timer.
+- [Live search](https://leetbrofinder.rmkrv.com/live): Join a five-minute queue that prioritizes contest rating, then shared language and activity interests.
+- [Connections](https://leetbrofinder.rmkrv.com/connections): Manage contact requests and accepted practice partners. Login is required.
+- [Messages](https://leetbrofinder.rmkrv.com/messages): Exchange end-to-end encrypted direct messages with practice partners. Login is required.
+
+## Profiles and data
+
+Public profile pages show a verified user's public LeetCode statistics and their LeetBroFinder practice preferences. This can include contest rating, solved-problem counts, recent accepted submissions, preferred language, timezone, availability, and desired practice activities. Profile and availability data may change over time.
+
+## Privacy and security
+
+Account verification reads only the public LeetCode profile. LeetBroFinder passwords are separate from LeetCode passwords. New direct messages and cooperative-session messages are encrypted and signed in the browser before being sent to the service.
+
+## Access notes
+
+The site is a client-rendered React application. Browsing profiles is public, while messaging, connections, profile editing, and matchmaking require a verified account and login. Individual profile URLs use the form `https://leetbrofinder.rmkrv.com/profiles/{profile-id}`.

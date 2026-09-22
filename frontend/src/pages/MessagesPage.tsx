@@ -228,7 +228,7 @@ export default function MessagesPage() {
   if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><MessageCircle size={28}/><h2>Log in to see your conversations</h2><p>Use your LeetCode username and LeetBroFinder password.</p><Link className="primary" to="/login">Log in</Link></div></main>
 
   return <main className="messages-page">
-    <div className="page-heading"><h1>Messages</h1><p>Messages are end-to-end encrypted.</p></div>
+    <div className="page-heading"><p>Messages are end-to-end encrypted.</p></div>
     {error && <div className="notice error">{error}</div>}
     <div className="message-shell surface">
       <aside>
