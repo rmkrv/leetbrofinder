@@ -11,7 +11,44 @@
     <title>LeetBroFinder</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="app-shell">
+        <header class="topbar">
+          <a class="brand" href="/">LeetBroFinder <span class="beta">BETA</span></a>
+          <nav aria-label="Main navigation">
+            <a href="/">Browse</a>
+            <a href="/session">Live session</a>
+            <a href="/connections">Connections</a>
+            <a href="/messages">Messages</a>
+          </nav>
+          <a class="profile-button" href="/login">Log in</a>
+        </header>
+        <main>
+          <section class="intro">
+            <div>
+              <p class="eyebrow">Practice is better with company</p>
+              <h1>Find someone at your level. Solve better, together.</h1>
+              <p class="lede">LeetBroFinder matches verified LeetCode users for contests, problem-solving sessions, data-structures and algorithms practice, and interview preparation.</p>
+            </div>
+          </section>
+          <section class="finder" aria-labelledby="static-about-title">
+            <div class="finder-heading">
+              <div>
+                <p class="eyebrow">About LeetBroFinder</p>
+                <h2 id="static-about-title">Find your next practice partner</h2>
+              </div>
+            </div>
+            <p>Browse public profiles by contest rating, preferred programming language, activity, availability, and timezone. Verified users can message partners or join a live cooperative coding session.</p>
+            <p>LeetBroFinder is a free, non-commercial project created by rmkrv. It is not affiliated with or endorsed by LeetCode.</p>
+            <p><a href="/verify">Create and verify a profile</a> or <a href="/login">log in</a> to start matching.</p>
+          </section>
+        </main>
+        <footer>
+          <span>Copyright rmkrv</span>
+          <p>Built for practice, not profit. Not affiliated with LeetCode.</p>
+        </footer>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
