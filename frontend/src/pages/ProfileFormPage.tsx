@@ -47,9 +47,9 @@ export default function ProfileFormPage() {
     }).catch(error => setError(error.message))
   }, [])
 
-  if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><h2>Log in to edit your profile</h2><p>Use your LeetCode username and LeetBroFinder password.</p><Link className="primary" to="/login">Log in</Link></div></main>
+  if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><h2>Log in to edit your profile</h2><Link className="primary" to="/login">Log in</Link></div></main>
   if (hasPassword === null && error) return <main className="narrow-page"><div className="surface blocked"><h2>Could not load your profile</h2><p className="form-error">{error}</p><button className="primary" onClick={() => window.location.reload()}>Try again</button></div></main>
-  if (hasPassword === null) return <main className="narrow-page"><div className="surface blocked"><h2>Loading your profile…</h2><p>Checking your account setup.</p></div></main>
+  if (hasPassword === null) return <main className="narrow-page"><div className="surface blocked"><h2>Loading your profile…</h2></div></main>
 
   const needsPassword = !hasPassword
 

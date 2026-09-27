@@ -225,7 +225,7 @@ export default function MessagesPage() {
     }
   }
 
-  if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><MessageCircle size={28}/><h2>Log in to see your conversations</h2><p>Use your LeetCode username and LeetBroFinder password.</p><Link className="primary" to="/login">Log in</Link></div></main>
+  if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><MessageCircle size={28}/><h2>Log in to see your conversations</h2><Link className="primary" to="/login">Log in</Link></div></main>
 
   return <main className="messages-page">
     <div className="page-heading"><p>Messages are end-to-end encrypted.</p></div>
@@ -252,7 +252,7 @@ export default function MessagesPage() {
           </header>
           <div className="message-list">{messages.map(message => <div key={message.id} className={message.senderId === active.otherProfile?.id ? 'message' : 'message mine'}><strong>{displayName(message.senderUsername)}</strong><p>{message.displayContent}</p>{message.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}<time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>)}</div>
           <form onSubmit={submit}><input value={draft} onChange={event => changeDraft(event.target.value)} maxLength={1000} placeholder={messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label="Message"/><button aria-label="Send message" disabled={!draft.trim() || !messagingReady}><Send size={18}/></button></form>
-        </> : <div className="thread-empty"><MessageCircle/><h2>Pick a conversation</h2><p>Your messages will appear here.</p></div>}
+        </> : <div className="thread-empty"><MessageCircle/><h2>Pick a conversation</h2></div>}
       </section>
     </div>
   </main>

@@ -117,11 +117,11 @@ export default function CoopSessionPage() {
   const rerollMine = Boolean(session?.rerollRequestedById && session.rerollRequestedById === myId)
 
   return <main className="coop-page">
-    <div className="page-heading center"><p className="eyebrow">Live practice, together</p><h1>Practice with a partner</h1><p>Pair with someone around your level, agree on a problem, and work through it together on LeetCode.</p></div>
+    <div className="page-heading center"><h1>Practice with a partner</h1><p>Pair with someone around your level, agree on a problem, and work through it together on LeetCode.</p></div>
 
     {!session && <section className="surface session-lobby"><div className="session-icon"><Users/></div><h2>Start a shared coding session</h2><p>We’ll look for a verified user with a reasonably similar contest rating. There are no winners, scores, or timers.</p>{error && <p className="form-error">{error}</p>}<button className="primary" disabled={busy} onClick={findSomeone}>{busy ? <LoaderCircle className="spin"/> : <Users size={17}/>} Start matching</button></section>}
 
-    {session?.state === 'SEARCHING' && <section className="surface session-lobby"><div className="radar searching"><LoaderCircle/></div><p className="eyebrow">Looking nearby</p><h2>Searching for a coding partner…</h2><p>You can leave this page open. Your shared session appears as soon as someone joins.</p><button className="secondary" disabled={busy} onClick={leave}><LogOut size={16}/> Leave queue</button></section>}
+    {session?.state === 'SEARCHING' && <section className="surface session-lobby"><div className="radar searching"><LoaderCircle/></div><h2>Searching for a coding partner…</h2><p>You can leave this page open. Your shared session appears as soon as someone joins.</p><button className="secondary" disabled={busy} onClick={leave}><LogOut size={16}/> Leave queue</button></section>}
 
     {session && ['NEGOTIATING', 'ACTIVE'].includes(session.state) && session.partner && <div className="session-grid">
       <section className="session-main">
@@ -135,7 +135,7 @@ export default function CoopSessionPage() {
           <form className="suggest-form" onSubmit={suggest}><label>Or suggest a LeetCode URL or exact title<input maxLength={500} value={suggestion} onChange={e => setSuggestion(e.target.value)} placeholder="https://leetcode.com/problems/two-sum/"/></label><button className="secondary" disabled={busy || !suggestion.trim()}><Sparkles size={16}/> Suggest</button></form>
         </section>}
 
-        {session.state === 'ACTIVE' && <section className="surface working-note"><Sparkles/><div><h3>You both accepted</h3><p>Work on the problem together. This room stays open so you can discuss tradeoffs and compare solutions afterward.</p></div></section>}
+        {session.state === 'ACTIVE' && <section className="surface working-note"><Sparkles/><div><h3>Session open</h3><p>Discuss tradeoffs and compare solutions here.</p></div></section>}
 
         {notice && <p className="form-success">{notice} <Link to="/connections">View connections</Link></p>}
         {error && <p className="form-error">{error}</p>}
