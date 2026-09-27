@@ -19,8 +19,14 @@ public class ProfileMapper {
         return new ProfileResponse(
             p.id, p.leetcodeUsername, p.preferredLanguage, p.timezone,
             includeContact ? p.contactType : null, includeContact ? p.contactUsername : null,
-            p.activities, p.availability, p.verified, p.passwordHash != null, p.avatarUrl, p.totalSolved, p.easySolved,
-            p.mediumSolved, p.hardSolved, p.contestRating, p.contestRanking, p.contestsAttended,
+            p.activities, p.availability, p.verified, p.passwordHash != null, p.avatarUrl,
+            live == null ? p.totalSolved : live.totalSolved(),
+            live == null ? p.easySolved : live.easySolved(),
+            live == null ? p.mediumSolved : live.mediumSolved(),
+            live == null ? p.hardSolved : live.hardSolved(),
+            live == null ? p.contestRating : live.contestRating(),
+            live == null ? p.contestRanking : live.contestRanking(),
+            live == null ? p.contestsAttended : live.contestsAttended(),
             live == null ? List.of() : live.recentActivity(),
             live == null ? List.of() : live.languages(), p.updatedAt
         );
