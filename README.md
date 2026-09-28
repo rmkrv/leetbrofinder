@@ -96,3 +96,7 @@ Device keys are immutable after registration, and the browser pins a partner's k
 New browsers register as additional recipients, so future messages can be read on every registered device. A newly added device cannot decrypt older messages that were created before its key existed, and clearing browser storage still loses that device's private keys. The design does not include key backup or a Signal-style forward-secrecy ratchet.
 
 Authenticated profile actions use an opaque session token in the internal `X-Profile-Key` header. The token is managed by the frontend and is never presented as a user credential. API responses are rate-limited per client IP.
+
+## License
+
+LeetBroFinder is licensed under the [MIT License](LICENSE).
