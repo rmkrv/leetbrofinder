@@ -1,5 +1,5 @@
 import { CheckCircle2, LogOut } from 'lucide-react'
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { clearProfileKey, clearVerificationChallenge, getMe, getProfileKey, logout, updateMe } from '../api'
 import type { ActivityType, Availability } from '../types'
@@ -14,6 +14,7 @@ const activities: { value: ActivityType; label: string; description: string }[] 
 export default function ProfileFormPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const formRef = useRef<HTMLFormElement>(null)
   const [form, setForm] = useState({
     preferredLanguage: '',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -29,6 +30,8 @@ export default function ProfileFormPage() {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const needsPassword = hasPassword === false
+  const canSubmit = !busy && form.activities.length > 0 && (!needsPassword || (form.password.length >= 8 && form.password === form.confirmPassword))
 
   useEffect(() => {
     if (!getProfileKey()) return
@@ -47,11 +50,20 @@ export default function ProfileFormPage() {
     }).catch(error => setError(error.message))
   }, [])
 
+  useEffect(() => {
+    const saveWithKeyboard = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return
+      event.preventDefault()
+      if (canSubmit) formRef.current?.requestSubmit()
+      else formRef.current?.reportValidity()
+    }
+    window.addEventListener('keydown', saveWithKeyboard)
+    return () => window.removeEventListener('keydown', saveWithKeyboard)
+  }, [canSubmit])
+
   if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><h2>Log in to edit your profile</h2><Link className="primary" to="/login">Log in</Link></div></main>
   if (hasPassword === null && error) return <main className="narrow-page"><div className="surface blocked"><h2>Could not load your profile</h2><p className="form-error">{error}</p><button className="primary" onClick={() => window.location.reload()}>Try again</button></div></main>
   if (hasPassword === null) return <main className="narrow-page"><div className="surface blocked"><h2>Loading your profile…</h2></div></main>
-
-  const needsPassword = !hasPassword
 
   const toggle = (value: ActivityType) => setForm(current => ({
     ...current,
@@ -105,8 +117,8 @@ export default function ProfileFormPage() {
   }
 
   return <main className="form-page">
-    <div className="page-heading"><p className="eyebrow">{searchParams.get('verified') ? 'Account verified' : 'Your profile'}</p><h1>{searchParams.get('verified') ? 'Nice. Now finish your account.' : 'Edit your practice profile.'}</h1></div>
-    <form className="surface profile-form" onSubmit={submit} autoComplete="on">
+    <div className="page-heading"><p className="eyebrow">{searchParams.get('verified') ? 'Account verified' : 'Your profile'}</p><h1>{searchParams.get('verified') ? 'Nice. Now finish your account.' : ''}</h1></div>
+    <form ref={formRef} className="surface profile-form" onSubmit={submit} autoComplete="on">
       {username && <div className="verified-strip"><CheckCircle2 size={18}/><span><strong>{username}</strong> is verified</span></div>}
       <div className="form-grid">
         <label>LeetCode username<input name="username" autoComplete="username" value={username} readOnly/></label>
@@ -120,7 +132,7 @@ export default function ProfileFormPage() {
       <fieldset className="password-section"><legend>{needsPassword ? 'Create your login password (required)' : 'Change password (optional)'}</legend><p>Use at least 8 characters. Browser-generated strong passwords are supported. Do not use your LeetCode password.</p><div className="form-grid"><label>New password<input name="password" type="password" required={needsPassword} minLength={8} maxLength={72} autoComplete="new-password" value={form.password} onChange={event => setForm({ ...form, password: event.target.value })}/></label><label>Confirm new password<input name="passwordConfirmation" type="password" required={needsPassword || Boolean(form.password)} minLength={8} maxLength={72} autoComplete="new-password" value={form.confirmPassword} onChange={event => setForm({ ...form, confirmPassword: event.target.value })}/></label></div></fieldset>
       {error && <p className="form-error">{error}</p>}
       {saved && <p className="form-success">Profile saved.</p>}
-      <div className="form-actions"><button type="button" className="text-button logout-button" onClick={signOut}><LogOut size={15}/> Log out</button><Link to="/">Cancel</Link><button className="primary" disabled={busy || form.activities.length === 0 || (needsPassword && (form.password.length < 8 || form.password !== form.confirmPassword))}>{busy ? 'Saving…' : needsPassword ? 'Create account' : 'Save profile'}</button></div>
+      <div className="form-actions"><button type="button" className="text-button logout-button" onClick={signOut}><LogOut size={15}/> Log out</button><Link to="/">Cancel</Link><button className="primary" disabled={!canSubmit}>{busy ? 'Saving…' : needsPassword ? 'Create account' : 'Save profile'}</button></div>
     </form>
   </main>
 }
