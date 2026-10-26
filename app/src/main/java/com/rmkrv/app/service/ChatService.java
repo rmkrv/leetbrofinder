@@ -5,6 +5,7 @@ import com.rmkrv.app.domain.*;
 import com.rmkrv.app.repository.*;
 import com.rmkrv.app.web.BadRequestException;
 import com.rmkrv.app.web.NotFoundException;
+import java.time.Instant;
 import java.util.*;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,19 @@ public class ChatService {
         return messages.findByConversationIdOrderByCreatedAtAsc(c.id, PageRequest.of(0, 200)).stream().map(this::message).toList();
     }
 
+    @Transactional(readOnly = true)
+    public UnreadCountResponse unreadCount(String key) {
+        Profile me = auth.requireComplete(key);
+        return new UnreadCountResponse(messages.countAllUnread(me.id));
+    }
+
+    @Transactional
+    public void markRead(String key, UUID conversationId) {
+        Profile me = auth.requireComplete(key);
+        Conversation c = requireMember(conversationId, me);
+        messages.markRead(c.id, me.id, Instant.now());
+    }
+
     @Transactional
     public MessageResponse send(String key, UUID conversationId, EncryptedMessageRequest request) {
         Profile me = auth.requireComplete(key);
@@ -66,6 +80,35 @@ public class ChatService {
         return message(messages.save(m));
     }
 
+    @Transactional
+    public MessageResponse edit(String key, UUID conversationId, UUID messageId, EncryptedMessageRequest request) {
+        Profile me = auth.requireComplete(key);
+        Conversation c = requireMember(conversationId, me);
+        Message m = messages.findInConversation(c.id, messageId)
+            .orElseThrow(() -> new NotFoundException("Message not found"));
+        if (!m.sender.id.equals(me.id)) throw new NotFoundException("Message not found");
+        Profile recipient = c.profileA.id.equals(me.id) ? c.profileB : c.profileA;
+        e2ee.validateEnvelope(me, recipient, request);
+        m.content = null;
+        m.ciphertext = request.ciphertext(); m.encryptionIv = request.iv(); m.encryptionSalt = request.salt();
+        m.signature = request.signature(); m.cryptoVersion = request.cryptoVersion();
+        m.senderKeyFingerprint = request.senderKeyFingerprint();
+        m.recipientKeyFingerprint = request.recipientKeyFingerprint();
+        m.recipientKeyEnvelopes = request.recipientKeys() == null ? null : e2ee.encodeRecipients(request.recipientKeys());
+        m.editedAt = Instant.now();
+        return message(messages.save(m));
+    }
+
+    @Transactional
+    public void delete(String key, UUID conversationId, UUID messageId) {
+        Profile me = auth.requireComplete(key);
+        Conversation c = requireMember(conversationId, me);
+        Message m = messages.findInConversation(c.id, messageId)
+            .orElseThrow(() -> new NotFoundException("Message not found"));
+        if (!m.sender.id.equals(me.id)) throw new NotFoundException("Message not found");
+        messages.delete(m);
+    }
+
     private Conversation requireMember(UUID id, Profile me) {
         Conversation c = conversations.findById(id).orElseThrow(() -> new NotFoundException("Conversation not found"));
         if (!c.profileA.id.equals(me.id) && !c.profileB.id.equals(me.id)) throw new NotFoundException("Conversation not found");
@@ -74,12 +117,12 @@ public class ChatService {
     private ConversationResponse response(Conversation c, Profile me) {
         Profile other = c.profileA.id.equals(me.id) ? c.profileB : c.profileA;
         MessageResponse last = messages.findFirstByConversationIdOrderByCreatedAtDesc(c.id).map(this::message).orElse(null);
-        return new ConversationResponse(c.id, mapper.toPublicResponse(other), last, c.createdAt);
+        return new ConversationResponse(c.id, mapper.toPublicResponse(other), last, messages.countUnread(c.id, me.id), c.createdAt);
     }
     private MessageResponse message(Message m) {
         return new MessageResponse(m.id, m.sender.id, m.sender.leetcodeUsername, m.content,
             m.ciphertext, m.encryptionIv, m.encryptionSalt, m.signature, m.cryptoVersion,
             m.senderKeyFingerprint, m.recipientKeyFingerprint,
-            e2ee.decodeRecipients(m.recipientKeyEnvelopes), m.createdAt);
+            e2ee.decodeRecipients(m.recipientKeyEnvelopes), m.createdAt, m.editedAt);
     }
 }

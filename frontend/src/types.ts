@@ -10,8 +10,8 @@ export interface E2eeKeyBundle { deviceId: string; profileId: string; encryption
 export interface RecipientKeyEnvelope { keyFingerprint: string; wrappedKey: string; iv: string }
 export interface EncryptedMessagePayload { ciphertext: string; iv: string; salt: string; signature: string; cryptoVersion: 2; senderKeyFingerprint: string; recipientKeys: RecipientKeyEnvelope[] }
 export interface EncryptedMessageEnvelope extends Omit<Partial<EncryptedMessagePayload>, 'cryptoVersion'> { content: string | null; cryptoVersion?: 1 | 2; recipientKeyFingerprint?: string }
-export interface Message extends EncryptedMessageEnvelope { id: string; senderId: string; senderUsername: string; createdAt: string }
-export interface Conversation { id: string; otherProfile: Profile; lastMessage: Message | null; createdAt: string }
+export interface Message extends EncryptedMessageEnvelope { id: string; senderId: string; senderUsername: string; createdAt: string; editedAt: string | null }
+export interface Conversation { id: string; otherProfile: Profile; lastMessage: Message | null; unreadCount: number; createdAt: string }
 export interface LiveSearch { id: string; status: 'SEARCHING' | 'MATCHED' | 'CANCELLED' | 'EXPIRED'; expiresAt: string; match: Profile | null }
 export type CoopSessionState = 'SEARCHING' | 'NEGOTIATING' | 'ACTIVE' | 'CLOSED' | 'CANCELLED'
 export interface SessionPlayer { id: string; leetcodeUsername: string; avatarUrl: string | null; contestRating: number | null }

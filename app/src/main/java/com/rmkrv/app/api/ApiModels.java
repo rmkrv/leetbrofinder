@@ -78,9 +78,10 @@ public final class ApiModels {
         UUID id, UUID senderId, String senderUsername, String content,
         String ciphertext, String iv, String salt, String signature, Integer cryptoVersion,
         String senderKeyFingerprint, String recipientKeyFingerprint,
-        List<RecipientKeyEnvelope> recipientKeys, Instant createdAt
+        List<RecipientKeyEnvelope> recipientKeys, Instant createdAt, Instant editedAt
     ) {}
-    public record ConversationResponse(UUID id, ProfileResponse otherProfile, MessageResponse lastMessage, Instant createdAt) {}
+    public record ConversationResponse(UUID id, ProfileResponse otherProfile, MessageResponse lastMessage, long unreadCount, Instant createdAt) {}
+    public record UnreadCountResponse(long unreadCount) {}
     public record LiveSearchResponse(UUID id, String status, Instant expiresAt, ProfileResponse match) {}
 
     public record SessionProblem(String title, String titleSlug, String difficulty, String url) {}

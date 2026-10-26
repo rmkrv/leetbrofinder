@@ -43,7 +43,7 @@ public class ProfileService {
             .orElseThrow(() -> new NotFoundException("Profile not found"));
         LeetCodeSnapshot live;
         try { live = leetCode.fetch(p.leetcodeUsername); } catch (RuntimeException ignored) { live = null; }
-        return mapper.toResponse(p, live, false);
+        return mapper.toResponse(p, live, true);
     }
 
     @Transactional(readOnly = true)

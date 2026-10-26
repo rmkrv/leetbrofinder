@@ -79,13 +79,14 @@ The API runs as the public Cloud Run service `leetbrofinder-api` in `europe-cent
 - `GET/POST /api/coop-sessions/{id}/messages` and the `/voice/*` signaling endpoints
 - `PUT /api/e2ee/keys/me` and `GET /api/e2ee/keys/{profileId}`
 - `GET/POST /api/connections` and `POST /api/connections/{id}/accept`
-- `GET/POST /api/conversations`
+- `GET/POST /api/conversations`, including unread counts and read state
+- `PATCH/DELETE /api/conversations/{id}/messages/{messageId}` for sender-owned message edits and deletion
 
 ## Cooperative coding sessions
 
 The API owns the matchmaking queue and pairs users by the closest available contest rating. It reads the current LeetCode catalog size and selects a problem at a uniformly random catalog index. Either partner can suggest a LeetCode URL/title, and a reroll needs the other partner's agreement. The session becomes active only when both users accept the current problem. There is no timer, score, winner, or submission verification.
 
-Session discussion is stored with the session. Optional voice uses browser WebRTC audio and short-lived, in-memory signaling state on the API; it is not a persistent voice room. Partners can exchange connection requests after a session starts, and contact details remain hidden until the recipient accepts.
+Session discussion is stored with the session. Optional voice uses browser WebRTC audio and short-lived, in-memory signaling state on the API; it is not a persistent voice room. Partners can exchange connection requests after a session starts. Users can also add an optional Discord, Telegram, LinkedIn, or other contact handle to their public profile.
 
 ## End-to-end encrypted messages
 

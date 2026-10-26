@@ -20,5 +20,7 @@ public class Message {
     @Column(name = "recipient_key_fingerprint", length = 64) public String recipientKeyFingerprint;
     @Column(name = "recipient_key_envelopes", columnDefinition = "TEXT") public String recipientKeyEnvelopes;
     @Column(name = "created_at", nullable = false) public Instant createdAt;
+    @Column(name = "read_at") public Instant readAt;
+    @Column(name = "edited_at") public Instant editedAt;
     @PrePersist void prePersist() { if (id == null) id = UUID.randomUUID(); if (createdAt == null) createdAt = Instant.now(); }
 }

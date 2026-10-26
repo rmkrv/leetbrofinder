@@ -15,6 +15,8 @@ public class ChatController {
     public ChatController(ChatService chat) { this.chat = chat; }
 
     @GetMapping public List<ConversationResponse> list(@RequestHeader(value = "X-Profile-Key", required = false) String key) { return chat.list(key); }
+    @GetMapping("/unread-count")
+    public UnreadCountResponse unreadCount(@RequestHeader(value = "X-Profile-Key", required = false) String key) { return chat.unreadCount(key); }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)
     public ConversationResponse start(@RequestHeader(value = "X-Profile-Key", required = false) String key,
             @Valid @RequestBody StartConversationRequest request) { return chat.start(key, request.targetProfileId()); }
@@ -23,4 +25,13 @@ public class ChatController {
     @PostMapping("/{id}/messages") @ResponseStatus(HttpStatus.CREATED)
     public MessageResponse send(@RequestHeader(value = "X-Profile-Key", required = false) String key, @PathVariable UUID id,
             @Valid @RequestBody EncryptedMessageRequest request) { return chat.send(key, id, request); }
+    @PostMapping("/{id}/read") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markRead(@RequestHeader(value = "X-Profile-Key", required = false) String key, @PathVariable UUID id) { chat.markRead(key, id); }
+    @PatchMapping("/{id}/messages/{messageId}")
+    public MessageResponse edit(@RequestHeader(value = "X-Profile-Key", required = false) String key,
+            @PathVariable UUID id, @PathVariable UUID messageId,
+            @Valid @RequestBody EncryptedMessageRequest request) { return chat.edit(key, id, messageId, request); }
+    @DeleteMapping("/{id}/messages/{messageId}") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@RequestHeader(value = "X-Profile-Key", required = false) String key,
+            @PathVariable UUID id, @PathVariable UUID messageId) { chat.delete(key, id, messageId); }
 }

@@ -38,6 +38,12 @@ export default function UserProfilePage() {
     setTimeout(() => setCopied(false), 1800)
   }
 
+  const contactHref = profile?.contactType === 'LinkedIn' && profile.contactUsername
+    ? `https://www.linkedin.com/in/${encodeURIComponent(profile.contactUsername.replace(/^@/, ''))}`
+    : profile?.contactType === 'Telegram' && profile.contactUsername
+      ? `https://t.me/${encodeURIComponent(profile.contactUsername.replace(/^@/, ''))}`
+      : null
+
   if (error && !profile) return <main className="narrow-page"><div className="surface blocked"><h2>Profile unavailable</h2><p>{error}</p><Link to="/">Back to search</Link></div></main>
   if (!profile) return <main className="narrow-page"><div className="loading-block">Loading profile…</div></main>
 
@@ -49,7 +55,9 @@ export default function UserProfilePage() {
         <div><h1>{profile.leetcodeUsername} <span>✓</span></h1><p>{profile.preferredLanguage || 'Language not set'} · {profile.timezone || 'Timezone not set'} · {statusLabel[profile.availability]}</p></div>
         <div className="profile-cta">
           <button className="primary" onClick={message}><MessageCircle size={17}/> Message</button>
-          {profile.contactUsername && <button className="secondary" onClick={copyContact}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? 'Copied' : `${profile.contactType}: ${profile.contactUsername}`}</button>}
+          {profile.contactUsername && (contactHref
+            ? <a className="secondary" href={contactHref} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> {profile.contactType}: {profile.contactUsername}</a>
+            : <button className="secondary" onClick={copyContact}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? 'Copied' : `${profile.contactType}: ${profile.contactUsername}`}</button>)}
         </div>
       </div>
     </section>

@@ -3,6 +3,7 @@ const KEY_NAME = 'leetbrofinder.profile-key'
 const CHALLENGE_NAME = 'leetbrofinder.verification-challenge'
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 export const PROFILE_AUTH_EVENT = 'leetbrofinder-auth-changed'
+export const UNREAD_CHANGED_EVENT = 'leetbrofinder-unread-changed'
 export const getProfileKey = () => localStorage.getItem(KEY_NAME) || sessionStorage.getItem(KEY_NAME)
 export const saveSessionToken = (token: string, rememberMe = false) => {
   sessionStorage.removeItem(KEY_NAME)
@@ -62,9 +63,16 @@ export async function logout() {
   try { await request<void>('/api/auth/logout', { method: 'POST' }) } finally { clearProfileKey() }
 }
 export const listConversations = () => request<Conversation[]>('/api/conversations')
+export const getUnreadCount = () => request<{ unreadCount: number }>('/api/conversations/unread-count')
 export const startConversation = (targetProfileId: string) => request<Conversation>('/api/conversations', { method: 'POST', body: JSON.stringify({ targetProfileId }) })
 export const getMessages = (id: string) => request<Message[]>(`/api/conversations/${id}/messages`)
 export const sendMessage = (id: string, payload: EncryptedMessagePayload) => request<Message>(`/api/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify(payload) })
+export const editMessage = (conversationId: string, messageId: string, payload: EncryptedMessagePayload) => request<Message>(`/api/conversations/${conversationId}/messages/${messageId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+export const deleteMessage = (conversationId: string, messageId: string) => request<void>(`/api/conversations/${conversationId}/messages/${messageId}`, { method: 'DELETE' })
+export const markConversationRead = async (id: string) => {
+  await request<void>(`/api/conversations/${id}/read`, { method: 'POST' })
+  window.dispatchEvent(new Event(UNREAD_CHANGED_EVENT))
+}
 export const getE2eeKeyBundles = (profileId: string) => request<E2eeKeyBundle[]>(`/api/e2ee/keys/${profileId}/devices`)
 export const registerE2eeKeys = (deviceId: string, encryptionPublicKey: string, signingPublicKey: string) => request<E2eeKeyBundle>('/api/e2ee/keys/me', { method: 'PUT', body: JSON.stringify({ deviceId, encryptionPublicKey, signingPublicKey }) })
 export const joinLiveSearch = () => request<LiveSearch>('/api/live-search', { method: 'POST' })

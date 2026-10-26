@@ -246,6 +246,44 @@ class AppApplicationTests {
 
 	@Test
 	@Transactional
+	void tracksUnreadMessagesAndRestrictsEditsAndDeletesToTheSender() {
+		Profile sender = sessionProfile("messageOwner", "owner#1234", 1500);
+		Profile recipient = sessionProfile("messageReader", "reader#1234", 1510);
+		profiles.saveAllAndFlush(List.of(sender, recipient));
+		enableE2ee(sender, "1");
+		enableE2ee(recipient, "2");
+		var senderSession = auth.createSession(sender, false);
+		var recipientSession = auth.createSession(recipient, false);
+		Conversation conversation = new Conversation();
+		conversation.profileA = sender;
+		conversation.profileB = recipient;
+		conversations.saveAndFlush(conversation);
+
+		var sent = chat.send(senderSession.sessionToken(), conversation.id,
+			encryptedRequest(sender, recipient, "b3JpZ2luYWw"));
+
+		assertThat(chat.unreadCount(senderSession.sessionToken()).unreadCount()).isZero();
+		assertThat(chat.unreadCount(recipientSession.sessionToken()).unreadCount()).isEqualTo(1);
+		assertThat(chat.list(recipientSession.sessionToken()).getFirst().unreadCount()).isEqualTo(1);
+		chat.markRead(recipientSession.sessionToken(), conversation.id);
+		assertThat(chat.unreadCount(recipientSession.sessionToken()).unreadCount()).isZero();
+
+		var edited = chat.edit(senderSession.sessionToken(), conversation.id, sent.id(),
+			encryptedRequest(sender, recipient, "ZWRpdGVk"));
+		assertThat(edited.ciphertext()).isEqualTo("ZWRpdGVk");
+		assertThat(edited.editedAt()).isNotNull();
+		assertThatThrownBy(() -> chat.edit(recipientSession.sessionToken(), conversation.id, sent.id(),
+			encryptedRequest(recipient, sender, "bm90LWFsbG93ZWQ")))
+			.isInstanceOf(com.rmkrv.app.web.NotFoundException.class);
+		assertThatThrownBy(() -> chat.delete(recipientSession.sessionToken(), conversation.id, sent.id()))
+			.isInstanceOf(com.rmkrv.app.web.NotFoundException.class);
+
+		chat.delete(senderSession.sessionToken(), conversation.id, sent.id());
+		assertThat(messages.findById(sent.id())).isEmpty();
+	}
+
+	@Test
+	@Transactional
 	void matchesAQueuedProfileAfterThePersistenceContextCloses() {
 		Profile me = new Profile();
 		me.leetcodeUsername = "queueOwner";

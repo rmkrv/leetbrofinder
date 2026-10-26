@@ -1,7 +1,16 @@
-import { MessageCircle, Send } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { Check, MessageCircle, Pencil, Send, Trash2, X } from 'lucide-react'
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getMe, getMessages, getProfileKey, listConversations, sendMessage } from '../api'
+import {
+  deleteMessage,
+  editMessage,
+  getMe,
+  getMessages,
+  getProfileKey,
+  listConversations,
+  markConversationRead,
+  sendMessage,
+} from '../api'
 import { decryptMessage, encryptMessage, ensureE2eeIdentity, getE2eeFingerprint, type Decrypted } from '../e2ee'
 import type { Conversation, Message } from '../types'
 
@@ -106,6 +115,9 @@ const refreshMessages = (
     .then(async ([items, fingerprint]) => {
       const decrypted = await Promise.all(items.map(item =>
         decryptMessage('conversation', conversationId, myProfileId, partnerId, item)))
+      await markConversationRead(conversationId)
+      snapshot.conversations = snapshot.conversations.map(item =>
+        item.id === conversationId ? { ...item, unreadCount: 0 } : item)
       const result = { items: decrypted, ready: Boolean(fingerprint) }
       snapshot.messages.set(conversationId, result.items)
       snapshot.messagingReady.set(conversationId, result.ready)
@@ -120,6 +132,11 @@ const refreshMessages = (
   return promise
 }
 
+const resizeTextarea = (target: HTMLTextAreaElement) => {
+  target.style.height = '0px'
+  target.style.height = `${Math.min(target.scrollHeight, 160)}px`
+}
+
 export default function MessagesPage() {
   const [params] = useSearchParams()
   const profileKey = getProfileKey() || ''
@@ -131,7 +148,13 @@ export default function MessagesPage() {
   const [myProfileId, setMyProfileId] = useState(() => snapshot.myProfileId)
   const [messagingReady, setMessagingReady] = useState(() => snapshot.messagingReady.get(initialSelected) || false)
   const [draft, setDraft] = useState(() => snapshot.drafts.get(initialSelected) || '')
+  const [editingId, setEditingId] = useState('')
+  const [editDraft, setEditDraft] = useState('')
+  const [deleteConfirmId, setDeleteConfirmId] = useState('')
+  const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
+  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const composerFormRef = useRef<HTMLFormElement>(null)
 
   const loadConversations = useCallback(async (force = false) => {
     const items = await refreshConversations(snapshot, force)
@@ -169,6 +192,19 @@ export default function MessagesPage() {
     return () => { stopped = true }
   }, [snapshot])
 
+  useEffect(() => {
+    if (composerRef.current) resizeTextarea(composerRef.current)
+  }, [draft])
+
+  useEffect(() => {
+    if (!profileKey) return
+    const poll = window.setInterval(() => {
+      void loadConversations(true).catch(cause =>
+        setError(cause instanceof Error ? cause.message : 'Could not refresh conversations'))
+    }, REFRESH_AFTER_MS)
+    return () => window.clearInterval(poll)
+  }, [loadConversations, profileKey])
+
   const active = conversations.find(conversation => conversation.id === selected)
   const partnerId = active?.otherProfile?.id || ''
 
@@ -178,15 +214,22 @@ export default function MessagesPage() {
     setMessages(snapshot.messages.get(selected) || [])
     setMessagingReady(snapshot.messagingReady.get(selected) || false)
     setDraft(snapshot.drafts.get(selected) || '')
+    setEditingId('')
+    setDeleteConfirmId('')
     const load = async (force = false) => {
       try {
         const result = await refreshMessages(snapshot, selected, myProfileId, partnerId, force)
-        if (!stopped) { setMessages(result.items); setMessagingReady(result.ready); setError('') }
+        if (!stopped) {
+          setMessages(result.items)
+          setMessagingReady(result.ready)
+          setConversations(snapshot.conversations)
+          setError('')
+        }
       } catch (cause) {
         if (!stopped) setError(cause instanceof Error ? cause.message : 'Could not load messages')
       }
     }
-    void load()
+    void load(true)
     const poll = window.setInterval(() => { void load(true) }, REFRESH_AFTER_MS)
     return () => { stopped = true; window.clearInterval(poll) }
   }, [selected, myProfileId, partnerId, snapshot])
@@ -225,6 +268,65 @@ export default function MessagesPage() {
     }
   }
 
+  const sendOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>, form: HTMLFormElement | null) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    form?.requestSubmit()
+  }
+
+  const startEditing = (message: DisplayMessage) => {
+    if (message.decryptionState === 'failed') return
+    setEditingId(message.id)
+    setEditDraft(message.displayContent)
+    setDeleteConfirmId('')
+  }
+
+  const saveEdit = async (event: FormEvent, messageId: string) => {
+    event.preventDefault()
+    if (!editDraft.trim() || !selected || !myProfileId || !partnerId) return
+    setBusyId(messageId)
+    try {
+      const encrypted = await encryptMessage('conversation', selected, myProfileId, partnerId, editDraft.trim())
+      const updated = await editMessage(selected, messageId, encrypted)
+      const decrypted = await decryptMessage('conversation', selected, myProfileId, partnerId, updated)
+      setMessages(current => {
+        const next = current.map(message => message.id === messageId ? decrypted : message)
+        snapshot.messages.set(selected, next)
+        return next
+      })
+      setEditingId('')
+      setEditDraft('')
+      await loadConversations(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not edit message')
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  const removeMessage = async (messageId: string) => {
+    if (deleteConfirmId !== messageId) {
+      setDeleteConfirmId(messageId)
+      setEditingId('')
+      return
+    }
+    setBusyId(messageId)
+    try {
+      await deleteMessage(selected, messageId)
+      setMessages(current => {
+        const next = current.filter(message => message.id !== messageId)
+        snapshot.messages.set(selected, next)
+        return next
+      })
+      setDeleteConfirmId('')
+      await loadConversations(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not delete message')
+    } finally {
+      setBusyId('')
+    }
+  }
+
   if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><MessageCircle size={28}/><h2>Log in to see your conversations</h2><Link className="primary" to="/login">Log in</Link></div></main>
 
   return <main className="messages-page">
@@ -235,10 +337,11 @@ export default function MessagesPage() {
         <h2>Inbox</h2>
         {conversations.map(conversation => {
           const username = displayName(conversation.otherProfile?.leetcodeUsername)
-          const preview = conversation.lastMessage?.cryptoVersion ? 'New message' : conversation.lastMessage?.content || 'New conversation'
+          const preview = conversation.lastMessage?.cryptoVersion ? 'Encrypted message' : conversation.lastMessage?.content || 'New conversation'
           return <button key={conversation.id} className={selected === conversation.id ? 'active' : ''} onClick={() => selectConversation(conversation.id)}>
             <span className="mini-avatar">{initials(username)}</span>
             <span><strong>{username}</strong><small>{preview}</small></span>
+            {conversation.unreadCount > 0 && <span className="unread-badge" aria-label={`${conversation.unreadCount} unread messages`}>{conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}</span>}
           </button>
         })}
         {!conversations.length && <div className="inbox-empty"><p>No conversations yet.</p><Link to="/">Browse profiles</Link></div>}
@@ -250,8 +353,28 @@ export default function MessagesPage() {
             <div><strong>{displayName(active.otherProfile?.leetcodeUsername)}</strong><small>{active.otherProfile?.preferredLanguage || 'Language not set'} · {active.otherProfile?.timezone || 'Timezone not set'}</small></div>
             {active.otherProfile?.id && <Link to={`/profiles/${active.otherProfile.id}`}>View profile</Link>}
           </header>
-          <div className="message-list">{messages.map(message => <div key={message.id} className={message.senderId === active.otherProfile?.id ? 'message' : 'message mine'}><strong>{displayName(message.senderUsername)}</strong><p>{message.displayContent}</p>{message.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}<time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>)}</div>
-          <form onSubmit={submit}><input value={draft} onChange={event => changeDraft(event.target.value)} maxLength={1000} placeholder={messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label="Message"/><button aria-label="Send message" disabled={!draft.trim() || !messagingReady}><Send size={18}/></button></form>
+          <div className="message-list">{messages.map(message => {
+            const mine = message.senderId === myProfileId
+            return <div key={message.id} className={mine ? 'message mine' : 'message'}>
+              <strong>{displayName(message.senderUsername)}</strong>
+              {editingId === message.id ? <form className="message-edit-form" onSubmit={event => saveEdit(event, message.id)}>
+                <textarea autoFocus rows={1} maxLength={1000} value={editDraft} onChange={event => { setEditDraft(event.target.value); resizeTextarea(event.target) }} onKeyDown={event => sendOnEnter(event, event.currentTarget.form)} aria-label="Edit message"/>
+                <div><button type="button" onClick={() => setEditingId('')} aria-label="Cancel edit"><X size={14}/></button><button type="submit" disabled={!editDraft.trim() || busyId === message.id} aria-label="Save edit"><Check size={14}/></button></div>
+              </form> : <p>{message.displayContent}</p>}
+              {message.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}
+              <div className="message-meta">
+                <time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{message.editedAt && ' · edited'}</time>
+                {mine && editingId !== message.id && <span className="message-actions">
+                  <button onClick={() => startEditing(message)} disabled={message.decryptionState === 'failed' || busyId === message.id} aria-label="Edit message" title="Edit message"><Pencil size={12}/></button>
+                  <button className={deleteConfirmId === message.id ? 'confirm-delete' : ''} onClick={() => void removeMessage(message.id)} disabled={busyId === message.id} aria-label={deleteConfirmId === message.id ? 'Confirm delete message' : 'Delete message'} title={deleteConfirmId === message.id ? 'Click again to confirm' : 'Delete message'}><Trash2 size={12}/>{deleteConfirmId === message.id && <span>Confirm</span>}</button>
+                </span>}
+              </div>
+            </div>
+          })}</div>
+          <form ref={composerFormRef} className="message-composer" onSubmit={submit}>
+            <textarea ref={composerRef} rows={1} value={draft} onChange={event => changeDraft(event.target.value)} onKeyDown={event => sendOnEnter(event, composerFormRef.current)} maxLength={1000} placeholder={messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label="Message" disabled={!messagingReady}/>
+            <button aria-label="Send message" disabled={!draft.trim() || !messagingReady}><Send size={18}/></button>
+          </form>
         </> : <div className="thread-empty"><MessageCircle/><h2>Pick a conversation</h2></div>}
       </section>
     </div>
