@@ -194,7 +194,11 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (composerRef.current) resizeTextarea(composerRef.current)
-  }, [draft])
+  }, [draft, editDraft, editingId])
+
+  useEffect(() => {
+    if (editingId) composerRef.current?.focus()
+  }, [editingId])
 
   useEffect(() => {
     if (!profileKey) return
@@ -235,6 +239,8 @@ export default function MessagesPage() {
   }, [selected, myProfileId, partnerId, snapshot])
 
   const selectConversation = (conversationId: string) => {
+    setEditingId('')
+    setEditDraft('')
     snapshot.selected = conversationId
     setSelected(conversationId)
     setMessages(snapshot.messages.get(conversationId) || [])
@@ -249,6 +255,10 @@ export default function MessagesPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (editingId) {
+      await saveEdit(editingId)
+      return
+    }
     if (!draft.trim() || !selected || !myProfileId || !partnerId) return
     try {
       const encrypted = await encryptMessage('conversation', selected, myProfileId, partnerId, draft.trim())
@@ -281,8 +291,13 @@ export default function MessagesPage() {
     setDeleteConfirmId('')
   }
 
-  const saveEdit = async (event: FormEvent, messageId: string) => {
-    event.preventDefault()
+  const cancelEdit = () => {
+    setEditingId('')
+    setEditDraft('')
+    composerRef.current?.focus()
+  }
+
+  const saveEdit = async (messageId: string) => {
     if (!editDraft.trim() || !selected || !myProfileId || !partnerId) return
     setBusyId(messageId)
     try {
@@ -294,8 +309,7 @@ export default function MessagesPage() {
         snapshot.messages.set(selected, next)
         return next
       })
-      setEditingId('')
-      setEditDraft('')
+      cancelEdit()
       await loadConversations(true)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not edit message')
@@ -357,10 +371,7 @@ export default function MessagesPage() {
             const mine = message.senderId === myProfileId
             return <div key={message.id} className={mine ? 'message mine' : 'message'}>
               <strong>{displayName(message.senderUsername)}</strong>
-              {editingId === message.id ? <form className="message-edit-form" onSubmit={event => saveEdit(event, message.id)}>
-                <textarea autoFocus rows={1} maxLength={1000} value={editDraft} onChange={event => { setEditDraft(event.target.value); resizeTextarea(event.target) }} onKeyDown={event => sendOnEnter(event, event.currentTarget.form)} aria-label="Edit message"/>
-                <div><button type="button" onClick={() => setEditingId('')} aria-label="Cancel edit"><X size={14}/></button><button type="submit" disabled={!editDraft.trim() || busyId === message.id} aria-label="Save edit"><Check size={14}/></button></div>
-              </form> : <p>{message.displayContent}</p>}
+              <p>{message.displayContent}</p>
               {message.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}
               <div className="message-meta">
                 <time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{message.editedAt && ' · edited'}</time>
@@ -372,8 +383,11 @@ export default function MessagesPage() {
             </div>
           })}</div>
           <form ref={composerFormRef} className="message-composer" onSubmit={submit}>
-            <textarea ref={composerRef} rows={1} value={draft} onChange={event => changeDraft(event.target.value)} onKeyDown={event => sendOnEnter(event, composerFormRef.current)} maxLength={1000} placeholder={messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label="Message" disabled={!messagingReady}/>
-            <button aria-label="Send message" disabled={!draft.trim() || !messagingReady}><Send size={18}/></button>
+            {editingId && <div className="composer-edit-banner"><span><Pencil size={14}/> Editing message</span><button type="button" onClick={cancelEdit} disabled={busyId === editingId} aria-label="Cancel edit"><X size={16}/></button></div>}
+            <div className="composer-input-row">
+              <textarea ref={composerRef} rows={1} value={editingId ? editDraft : draft} onChange={event => editingId ? setEditDraft(event.target.value) : changeDraft(event.target.value)} onKeyDown={event => sendOnEnter(event, composerFormRef.current)} maxLength={1000} placeholder={editingId ? 'Edit your message…' : messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label={editingId ? 'Edit message' : 'Message'} disabled={!messagingReady || Boolean(busyId)}/>
+              <button aria-label={editingId ? 'Save edit' : 'Send message'} disabled={!(editingId ? editDraft : draft).trim() || !messagingReady || Boolean(busyId)}>{editingId ? <Check size={18}/> : <Send size={18}/>}</button>
+            </div>
           </form>
         </> : <div className="thread-empty"><MessageCircle/><h2>Pick a conversation</h2></div>}
       </section>
