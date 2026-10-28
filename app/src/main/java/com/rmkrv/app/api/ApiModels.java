@@ -1,7 +1,6 @@
 package com.rmkrv.app.api;
 
 import com.rmkrv.app.domain.ActivityType;
-import com.rmkrv.app.domain.Availability;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.Instant;
@@ -22,7 +21,7 @@ public final class ApiModels {
 
     public record ProfileResponse(
         UUID id, String leetcodeUsername, String preferredLanguage, String timezone,
-        String contactType, String contactUsername, Set<ActivityType> activities, Availability availability,
+        String contactType, String contactUsername, Set<ActivityType> activities, boolean lookingNow, Instant lastSeenAt,
         boolean verified, boolean hasPassword, String avatarUrl, int totalSolved, int easySolved, int mediumSolved,
         int hardSolved, Double contestRating, Integer contestRanking, int contestsAttended,
         List<LeetCodeActivity> recentActivity, List<LanguageStat> languages, Instant updatedAt
@@ -34,7 +33,6 @@ public final class ApiModels {
         @Size(max = 30) @Pattern(regexp = "^$|^[A-Za-z][A-Za-z0-9 ._-]*$", message = "contains unsupported characters") String contactType,
         @Size(max = 100) @Pattern(regexp = "^$|^[A-Za-z0-9@._+#-]+$", message = "must be a username, not a link") String contactUsername,
         @NotEmpty Set<ActivityType> activities,
-        @NotNull Availability availability,
         @Size(max = 72) String password
     ) {}
 

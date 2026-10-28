@@ -5,6 +5,8 @@ import com.rmkrv.app.domain.*;
 import com.rmkrv.app.repository.ProfileRepository;
 import com.rmkrv.app.web.NotFoundException;
 import jakarta.persistence.criteria.JoinType;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
@@ -23,14 +25,17 @@ public class ProfileService {
 
     @Transactional(readOnly = true)
     public Page<ProfileResponse> search(String query, Integer minRating, Integer maxRating, String language,
-            ActivityType activity, Availability availability, String timezone, int page, int size) {
+            ActivityType activity, Boolean lookingNow, String timezone, int page, int size) {
         Specification<Profile> spec = (root, cq, cb) -> cb.and(
             cb.isTrue(root.get("verified")), cb.isTrue(root.get("setupComplete")));
         if (query != null && !query.isBlank()) spec = spec.and((root,cq,cb) -> cb.like(cb.lower(root.get("leetcodeUsername")), "%" + query.toLowerCase() + "%"));
         if (minRating != null) spec = spec.and((root,cq,cb) -> cb.greaterThanOrEqualTo(root.get("contestRating"), minRating.doubleValue()));
         if (maxRating != null) spec = spec.and((root,cq,cb) -> cb.lessThanOrEqualTo(root.get("contestRating"), maxRating.doubleValue()));
         if (language != null && !language.isBlank()) spec = spec.and((root,cq,cb) -> cb.equal(cb.lower(root.get("preferredLanguage")), language.toLowerCase()));
-        if (availability != null) spec = spec.and((root,cq,cb) -> cb.equal(root.get("availability"), availability));
+        if (Boolean.TRUE.equals(lookingNow)) {
+            Instant cutoff = Instant.now().minus(Duration.ofMinutes(2));
+            spec = spec.and((root,cq,cb) -> cb.greaterThan(root.get("lastSeenAt"), cutoff));
+        }
         if (timezone != null && !timezone.isBlank()) spec = spec.and((root,cq,cb) -> cb.equal(root.get("timezone"), timezone));
         if (activity != null) spec = spec.and((root,cq,cb) -> { cq.distinct(true); return cb.equal(root.join("activities", JoinType.INNER), activity); });
         return profiles.findAll(spec, PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 50), Sort.by("updatedAt").descending()))
@@ -50,6 +55,12 @@ public class ProfileService {
     public ProfileResponse me(String key) { return mapper.toResponse(auth.require(key)); }
 
     @Transactional
+    public void markPresent(String key) {
+        Profile p = auth.require(key);
+        profiles.updateLastSeenAt(p.id, Instant.now());
+    }
+
+    @Transactional
     public ProfileResponse update(String key, UpdateProfileRequest request) {
         Profile p = auth.require(key);
         p.preferredLanguage = request.preferredLanguage().trim();
@@ -62,7 +73,6 @@ public class ProfileService {
         p.contactType = contactType;
         p.contactUsername = contactUsername;
         p.activities = new LinkedHashSet<>(request.activities());
-        p.availability = request.availability();
         auth.setPassword(p, request.password());
         p.setupComplete = true;
         try { mapper.applySnapshot(p, leetCode.fetch(p.leetcodeUsername)); } catch (RuntimeException ignored) {}

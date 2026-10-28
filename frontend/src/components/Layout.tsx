@@ -1,7 +1,7 @@
 import { Code2, Headphones, LogIn, LogOut, MessageCircle, Users, UserRoundPlus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { getProfileKey, getUnreadCount, logout, PROFILE_AUTH_EVENT, UNREAD_CHANGED_EVENT } from '../api'
+import { getProfileKey, getUnreadCount, logout, markPresent, PROFILE_AUTH_EVENT, UNREAD_CHANGED_EVENT } from '../api'
 export default function Layout() {
   const [hasProfile, setHasProfile] = useState(() => Boolean(getProfileKey()))
   const [unreadCount, setUnreadCount] = useState(0)
@@ -20,6 +20,14 @@ export default function Layout() {
     const poll = window.setInterval(load, 8000)
     window.addEventListener(UNREAD_CHANGED_EVENT, load)
     return () => { stopped = true; window.clearInterval(poll); window.removeEventListener(UNREAD_CHANGED_EVENT, load) }
+  }, [hasProfile])
+  useEffect(() => {
+    if (!hasProfile) return
+    const heartbeat = () => { if (document.visibilityState === 'visible') void markPresent().catch(() => {}) }
+    heartbeat()
+    const poll = window.setInterval(heartbeat, 60_000)
+    document.addEventListener('visibilitychange', heartbeat)
+    return () => { window.clearInterval(poll); document.removeEventListener('visibilitychange', heartbeat) }
   }, [hasProfile])
   const signOut = async () => { await logout().catch(() => {}); navigate('/login') }
   return <div className="app-shell">

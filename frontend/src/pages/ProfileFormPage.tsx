@@ -2,7 +2,7 @@ import { CheckCircle2, LogOut } from 'lucide-react'
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { clearProfileKey, clearVerificationChallenge, getMe, getProfileKey, logout, updateMe } from '../api'
-import type { ActivityType, Availability } from '../types'
+import type { ActivityType } from '../types'
 
 const activities: { value: ActivityType; label: string; description: string }[] = [
   { value: 'RANDOM_PROBLEMS', label: 'Random problems', description: 'Pick something and solve together' },
@@ -21,7 +21,6 @@ export default function ProfileFormPage() {
     contactType: '',
     contactUsername: '',
     activities: [] as ActivityType[],
-    availability: 'OCCASIONALLY' as Availability,
     password: '',
     confirmPassword: '',
   })
@@ -45,7 +44,6 @@ export default function ProfileFormPage() {
         contactType: profile.contactType || '',
         contactUsername: profile.contactUsername || '',
         activities: profile.activities || [],
-        availability: profile.availability || 'OCCASIONALLY',
       }))
     }).catch(error => setError(error.message))
   }, [])
@@ -91,7 +89,6 @@ export default function ProfileFormPage() {
         contactType: form.contactType,
         contactUsername: form.contactUsername,
         activities: form.activities,
-        availability: form.availability,
         password: form.password || undefined,
       })
       if (creatingPassword) {
@@ -128,7 +125,6 @@ export default function ProfileFormPage() {
         <label>Contact username <small>Optional</small><input name="contactUsername" autoComplete="off" required={Boolean(form.contactType)} disabled={!form.contactType} maxLength={100} value={form.contactUsername} onChange={event => setForm({ ...form, contactUsername: event.target.value })} placeholder={form.contactType ? `Your ${form.contactType} username` : 'Choose a method first'}/></label>
       </div>
       <fieldset><legend>What do you want to do?</legend><div className="choice-grid">{activities.map(activity => <label className={form.activities.includes(activity.value) ? 'choice selected' : 'choice'} key={activity.value}><input type="checkbox" checked={form.activities.includes(activity.value)} onChange={() => toggle(activity.value)}/><span><strong>{activity.label}</strong><small>{activity.description}</small></span><i>✓</i></label>)}</div></fieldset>
-      <fieldset><legend>Availability</legend><div className="segmented">{([['LOOKING_NOW', 'Looking now'], ['TODAY', 'Today'], ['OCCASIONALLY', 'Occasionally']] as [Availability, string][]).map(([value, label]) => <label key={value}><input type="radio" name="availability" checked={form.availability === value} onChange={() => setForm({ ...form, availability: value })}/><span>{label}</span></label>)}</div></fieldset>
       <fieldset className="password-section"><legend>{needsPassword ? 'Create your login password (required)' : 'Change password (optional)'}</legend><p>Use at least 8 characters. Browser-generated strong passwords are supported. Do not use your LeetCode password.</p><div className="form-grid"><label>New password<input name="password" type="password" required={needsPassword} minLength={8} maxLength={72} autoComplete="new-password" value={form.password} onChange={event => setForm({ ...form, password: event.target.value })}/></label><label>Confirm new password<input name="passwordConfirmation" type="password" required={needsPassword || Boolean(form.password)} minLength={8} maxLength={72} autoComplete="new-password" value={form.confirmPassword} onChange={event => setForm({ ...form, confirmPassword: event.target.value })}/></label></div></fieldset>
       {error && <p className="form-error">{error}</p>}
       {saved && <p className="form-success">Profile saved.</p>}

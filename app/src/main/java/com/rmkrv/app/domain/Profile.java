@@ -15,7 +15,7 @@ public class Profile {
     @Column(length = 64) public String timezone;
     @Column(name = "contact_type", length = 30) public String contactType;
     @Column(name = "contact_username", length = 100) public String contactUsername;
-    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 24) public Availability availability = Availability.OCCASIONALLY;
+    @Column(name = "last_seen_at") public Instant lastSeenAt;
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "profile_activities", joinColumns = @JoinColumn(name = "profile_id"))
     @Enumerated(EnumType.STRING) @Column(name = "activity", length = 32)

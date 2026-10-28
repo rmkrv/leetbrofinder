@@ -6,7 +6,6 @@ import com.rmkrv.app.api.ApiModels.RegisterE2eeKeysRequest;
 import com.rmkrv.app.api.ApiModels.SessionProblem;
 import com.rmkrv.app.api.ApiModels.UpdateProfileRequest;
 import com.rmkrv.app.domain.ActivityType;
-import com.rmkrv.app.domain.Availability;
 import com.rmkrv.app.domain.Conversation;
 import com.rmkrv.app.domain.E2eeDevice;
 import com.rmkrv.app.domain.Message;
@@ -27,6 +26,7 @@ import com.rmkrv.app.service.E2eeKeyService;
 import com.rmkrv.app.service.LeetCodeClient;
 import com.rmkrv.app.service.LiveSearchService;
 import com.rmkrv.app.service.ProfileAuthService;
+import com.rmkrv.app.service.ProfileService;
 import com.rmkrv.app.service.SessionInviteService;
 import com.rmkrv.app.service.VoiceChannelService;
 import com.rmkrv.app.web.UnauthorizedException;
@@ -50,6 +50,7 @@ import static org.mockito.Mockito.when;
 class AppApplicationTests {
 	@Autowired Validator validator;
 	@Autowired ProfileAuthService auth;
+	@Autowired ProfileService profileService;
 	@Autowired ProfileRepository profiles;
 	@Autowired EntityManager entityManager;
 	@Autowired ConversationRepository conversations;
@@ -74,16 +75,40 @@ class AppApplicationTests {
 	@Test
 	void allowsAnEmptyOptionalContact() {
 		var request = new UpdateProfileRequest("Java", "Europe/Warsaw", "", "",
-			Set.of(ActivityType.DSA_PRACTICE), Availability.OCCASIONALLY, null);
+			Set.of(ActivityType.DSA_PRACTICE), null);
 		assertThat(validator.validate(request)).isEmpty();
 	}
 
 	@Test
 	void rejectsMarkupInUserControlledProfileFields() {
 		var request = new UpdateProfileRequest("Java<script>", "Europe/Warsaw", "Discord",
-			"<img src=x onerror=alert(1)>", Set.of(ActivityType.DSA_PRACTICE), Availability.OCCASIONALLY, null);
+			"<img src=x onerror=alert(1)>", Set.of(ActivityType.DSA_PRACTICE), null);
 		assertThat(validator.validate(request)).extracting(violation -> violation.getPropertyPath().toString())
 			.contains("preferredLanguage", "contactUsername");
+	}
+
+	@Test
+	@Transactional
+	void derivesPresenceFromTheLastVisibleHeartbeat() {
+		Profile profile = sessionProfile("presenceUser", "presence#1234", 1500);
+		profiles.saveAndFlush(profile);
+		var session = auth.createSession(profile, false);
+		assertThat(profileService.me(session.sessionToken()).lookingNow()).isFalse();
+
+		profileService.markPresent(session.sessionToken());
+		entityManager.flush();
+		entityManager.clear();
+		var online = profileService.me(session.sessionToken());
+		assertThat(online.lookingNow()).isTrue();
+		assertThat(online.lastSeenAt()).isNotNull();
+		assertThat(profileService.search(null, null, null, null, null, true, null, 0, 24).getContent())
+			.extracting(item -> item.id()).contains(profile.id);
+
+		profiles.updateLastSeenAt(profile.id, Instant.now().minusSeconds(180));
+		entityManager.clear();
+		assertThat(profileService.me(session.sessionToken()).lookingNow()).isFalse();
+		assertThat(profileService.search(null, null, null, null, null, true, null, 0, 24).getContent())
+			.extracting(item -> item.id()).doesNotContain(profile.id);
 	}
 
 	@Test

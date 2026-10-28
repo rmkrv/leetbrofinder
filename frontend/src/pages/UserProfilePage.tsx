@@ -2,7 +2,7 @@ import { ArrowLeft, Check, Copy, ExternalLink, MessageCircle, Trophy } from 'luc
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getProfile, getProfileKey, startConversation } from '../api'
-import { activityLabel, statusLabel } from '../components/BroCard'
+import { activityLabel, presenceLabel } from '../components/BroCard'
 import type { Profile } from '../types'
 
 export default function UserProfilePage() {
@@ -14,7 +14,11 @@ export default function UserProfilePage() {
 
   useEffect(() => {
     if (!id) return
-    getProfile(id).then(setProfile).catch(error => setError(error.message))
+    let active = true
+    const load = () => { void getProfile(id).then(result => { if (active) setProfile(result) }).catch(error => { if (active) setError(error.message) }) }
+    load()
+    const poll = window.setInterval(load, 60_000)
+    return () => { active = false; window.clearInterval(poll) }
   }, [id])
 
   const message = async () => {
@@ -52,7 +56,7 @@ export default function UserProfilePage() {
     <section className="profile-hero surface">
       <div className="large-avatar">{profile.avatarUrl ? <img src={profile.avatarUrl} alt=""/> : profile.leetcodeUsername.slice(0, 2).toUpperCase()}</div>
       <div className="profile-title">
-        <div><h1>{profile.leetcodeUsername} <span>✓</span></h1><p>{profile.preferredLanguage || 'Language not set'} · {profile.timezone || 'Timezone not set'} · {statusLabel[profile.availability]}</p></div>
+        <div><h1>{profile.leetcodeUsername} <span>✓</span></h1><p>{profile.preferredLanguage || 'Language not set'} · {profile.timezone || 'Timezone not set'} · {presenceLabel(profile, true)}</p></div>
         <div className="profile-cta">
           <button className="primary" onClick={message}><MessageCircle size={17}/> Message</button>
           {profile.contactUsername && (contactHref

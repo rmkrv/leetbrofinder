@@ -6,6 +6,7 @@ import com.rmkrv.app.service.ProfileService;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,15 +22,18 @@ public class ProfileController {
             @RequestParam(required = false) Integer maxRating,
             @RequestParam(required = false) String language,
             @RequestParam(required = false) ActivityType activity,
-            @RequestParam(required = false) Availability availability,
+            @RequestParam(required = false) Boolean lookingNow,
             @RequestParam(required = false) String timezone,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "24") int size) {
-        return profiles.search(query, minRating, maxRating, language, activity, availability, timezone, page, size);
+        return profiles.search(query, minRating, maxRating, language, activity, lookingNow, timezone, page, size);
     }
 
     @GetMapping("/me")
     public ProfileResponse me(@RequestHeader(value = "X-Profile-Key", required = false) String key) { return profiles.me(key); }
+
+    @PostMapping("/me/presence") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markPresent(@RequestHeader(value = "X-Profile-Key", required = false) String key) { profiles.markPresent(key); }
 
     @GetMapping("/{id}")
     public ProfileResponse get(@PathVariable UUID id) { return profiles.get(id); }

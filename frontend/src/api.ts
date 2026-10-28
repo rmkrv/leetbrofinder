@@ -1,8 +1,9 @@
-import type { ActivityType, AuthResult, Availability, Challenge, Connection, Conversation, CoopMessage, CoopSession, E2eeKeyBundle, EncryptedMessagePayload, LiveSearch, Message, PageResponse, Profile, SessionInvite, VoiceSignal } from './types'
+import type { ActivityType, AuthResult, Challenge, Connection, Conversation, CoopMessage, CoopSession, E2eeKeyBundle, EncryptedMessagePayload, LiveSearch, Message, PageResponse, Profile, SessionInvite, VoiceSignal } from './types'
 const KEY_NAME = 'leetbrofinder.profile-key'
 const CHALLENGE_NAME = 'leetbrofinder.verification-challenge'
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 export const PROFILE_AUTH_EVENT = 'leetbrofinder-auth-changed'
+export const PROFILE_PRESENCE_EVENT = 'leetbrofinder-presence-updated'
 export const UNREAD_CHANGED_EVENT = 'leetbrofinder-unread-changed'
 export const getProfileKey = () => localStorage.getItem(KEY_NAME) || sessionStorage.getItem(KEY_NAME)
 export const saveSessionToken = (token: string, rememberMe = false) => {
@@ -51,11 +52,12 @@ async function request<T>(path: string, options: RequestInit = {}, authenticated
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
-export type ProfileFilters = { query?: string; language?: string; availability?: Availability | ''; activity?: ActivityType | ''; timezone?: string; minRating?: string; maxRating?: string }
+export type ProfileFilters = { query?: string; language?: string; lookingNow?: string; activity?: ActivityType | ''; timezone?: string; minRating?: string; maxRating?: string }
 export async function searchProfiles(filters: ProfileFilters): Promise<PageResponse<Profile>> { const params = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)) }); return request(`/api/profiles?${params.toString()}`) }
 export const getProfile = (id: string) => request<Profile>(`/api/profiles/${id}`)
 export const getMe = () => request<Profile>('/api/profiles/me')
-export const updateMe = (body: { preferredLanguage: string; timezone: string; contactType: string; contactUsername: string; activities: ActivityType[]; availability: Availability; password?: string }) => request<Profile>('/api/profiles/me', { method: 'PATCH', body: JSON.stringify(body) })
+export const markPresent = async () => { await request<void>('/api/profiles/me/presence', { method: 'POST' }); window.dispatchEvent(new Event(PROFILE_PRESENCE_EVENT)) }
+export const updateMe = (body: { preferredLanguage: string; timezone: string; contactType: string; contactUsername: string; activities: ActivityType[]; password?: string }) => request<Profile>('/api/profiles/me', { method: 'PATCH', body: JSON.stringify(body) })
 export const startVerification = (username: string) => request<Challenge>('/api/verification/start', { method: 'POST', body: JSON.stringify({ username }) }, false)
 export const confirmVerification = (id: string) => request<AuthResult>(`/api/verification/${id}/confirm`, { method: 'POST' }, false)
 export const login = (username: string, password: string, rememberMe: boolean) => request<AuthResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password, rememberMe }) }, false)
