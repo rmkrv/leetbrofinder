@@ -13,6 +13,7 @@ public class Profile {
     @Column(name = "leetcode_username", nullable = false, unique = true, length = 30) public String leetcodeUsername;
     @Column(name = "preferred_language", length = 40) public String preferredLanguage;
     @Column(length = 64) public String timezone;
+    @Column(length = 70) public String bio;
     @Column(name = "contact_type", length = 30) public String contactType;
     @Column(name = "contact_username", length = 100) public String contactUsername;
     @Column(name = "last_seen_at") public Instant lastSeenAt;

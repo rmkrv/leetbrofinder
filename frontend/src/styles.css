@@ -57,6 +57,7 @@ h1 span { color:#84968f; }
 .status.looking_now { color:#7ced9b;background:rgba(74,209,111,.09); }.status.looking_now i{background:#69e78c;}
 .status.today { color:#f0d578;background:rgba(232,196,77,.08); }.status.today i{background:#eacb63;}
 .bro-card>.status{margin:12px 0 0;align-self:flex-start}
+.profile-card-bio{max-width:100%;margin:12px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c7d8ce;font-size:.84rem}.profile-card-bio+.stats{margin-top:16px}.profile-detail-bio{max-width:620px;overflow-wrap:anywhere;color:var(--ink)!important}
 .stats { display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:24px 0 18px;padding:16px 0;border-block:1px solid #1f2e2a; }
 .stats div { display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:6px; }
 .stats svg,.lang-symbol { color:#7f948c; }

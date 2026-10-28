@@ -56,7 +56,7 @@ export default function UserProfilePage() {
     <section className="profile-hero surface">
       <div className="large-avatar">{profile.avatarUrl ? <img src={profile.avatarUrl} alt=""/> : profile.leetcodeUsername.slice(0, 2).toUpperCase()}</div>
       <div className="profile-title">
-        <div><h1>{profile.leetcodeUsername} <span>✓</span></h1><p>{profile.preferredLanguage || 'Language not set'} · {profile.timezone || 'Timezone not set'} · {presenceLabel(profile, true)}</p></div>
+        <div><h1>{profile.leetcodeUsername} <span>✓</span></h1><p>{profile.preferredLanguage || 'Language not set'} · {profile.timezone || 'Timezone not set'} · {presenceLabel(profile, true)}</p>{profile.bio && <p className="profile-detail-bio">{profile.bio}</p>}</div>
         <div className="profile-cta">
           <button className="primary" onClick={message}><MessageCircle size={17}/> Message</button>
           {profile.contactUsername && (contactHref

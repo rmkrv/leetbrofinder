@@ -57,7 +57,7 @@ export async function searchProfiles(filters: ProfileFilters): Promise<PageRespo
 export const getProfile = (id: string) => request<Profile>(`/api/profiles/${id}`)
 export const getMe = () => request<Profile>('/api/profiles/me')
 export const markPresent = async () => { await request<void>('/api/profiles/me/presence', { method: 'POST' }); window.dispatchEvent(new Event(PROFILE_PRESENCE_EVENT)) }
-export const updateMe = (body: { preferredLanguage: string; timezone: string; contactType: string; contactUsername: string; activities: ActivityType[]; password?: string }) => request<Profile>('/api/profiles/me', { method: 'PATCH', body: JSON.stringify(body) })
+export const updateMe = (body: { preferredLanguage: string; timezone: string; bio: string; contactType: string; contactUsername: string; activities: ActivityType[]; password?: string }) => request<Profile>('/api/profiles/me', { method: 'PATCH', body: JSON.stringify(body) })
 export const startVerification = (username: string) => request<Challenge>('/api/verification/start', { method: 'POST', body: JSON.stringify({ username }) }, false)
 export const confirmVerification = (id: string) => request<AuthResult>(`/api/verification/${id}/confirm`, { method: 'POST' }, false)
 export const login = (username: string, password: string, rememberMe: boolean) => request<AuthResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password, rememberMe }) }, false)

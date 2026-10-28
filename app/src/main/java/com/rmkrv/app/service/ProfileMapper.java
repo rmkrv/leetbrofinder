@@ -19,7 +19,7 @@ public class ProfileMapper {
 
     public ProfileResponse toResponse(Profile p, LeetCodeSnapshot live, boolean includeContact) {
         return new ProfileResponse(
-            p.id, p.leetcodeUsername, p.preferredLanguage, p.timezone,
+            p.id, p.leetcodeUsername, p.preferredLanguage, p.timezone, p.bio,
             includeContact ? p.contactType : null, includeContact ? p.contactUsername : null,
             p.activities, p.lastSeenAt != null && p.lastSeenAt.isAfter(Instant.now().minus(Duration.ofMinutes(2))),
             p.lastSeenAt, p.verified, p.passwordHash != null, p.avatarUrl,

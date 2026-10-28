@@ -74,17 +74,47 @@ class AppApplicationTests {
 
 	@Test
 	void allowsAnEmptyOptionalContact() {
-		var request = new UpdateProfileRequest("Java", "Europe/Warsaw", "", "",
+		var request = new UpdateProfileRequest("Java", "Europe/Warsaw", "", "", "",
 			Set.of(ActivityType.DSA_PRACTICE), null);
 		assertThat(validator.validate(request)).isEmpty();
 	}
 
 	@Test
 	void rejectsMarkupInUserControlledProfileFields() {
-		var request = new UpdateProfileRequest("Java<script>", "Europe/Warsaw", "Discord",
+		var request = new UpdateProfileRequest("Java<script>", "Europe/Warsaw", "", "Discord",
 			"<img src=x onerror=alert(1)>", Set.of(ActivityType.DSA_PRACTICE), null);
 		assertThat(validator.validate(request)).extracting(violation -> violation.getPropertyPath().toString())
 			.contains("preferredLanguage", "contactUsername");
+	}
+
+	@Test
+	void limitsBioToSeventyCharactersAndOneLine() {
+		var request = new UpdateProfileRequest("Java", "Europe/Warsaw", "x".repeat(71), "", "",
+			Set.of(ActivityType.DSA_PRACTICE), null);
+		assertThat(validator.validate(request)).extracting(violation -> violation.getPropertyPath().toString())
+			.contains("bio");
+		var multiline = new UpdateProfileRequest("Java", "Europe/Warsaw", "hello\nworld", "", "",
+			Set.of(ActivityType.DSA_PRACTICE), null);
+		assertThat(validator.validate(multiline)).extracting(violation -> violation.getPropertyPath().toString())
+			.contains("bio");
+	}
+
+	@Test
+	@Transactional
+	void savesAndPublishesOptionalBio() {
+		Profile profile = sessionProfile("bioUser", "bio#1234", 1500);
+		auth.setPassword(profile, "long-test-password");
+		profiles.saveAndFlush(profile);
+		var session = auth.createSession(profile, false);
+		var request = new UpdateProfileRequest("Java", "Europe/Warsaw", "  Happy to practice graphs  ",
+			"Discord", "bio#1234", Set.of(ActivityType.CONTESTS), null);
+
+		profileService.update(session.sessionToken(), request);
+		assertThat(profileService.get(profile.id).bio()).isEqualTo("Happy to practice graphs");
+
+		profileService.update(session.sessionToken(), new UpdateProfileRequest("Java", "Europe/Warsaw", "",
+			"Discord", "bio#1234", Set.of(ActivityType.CONTESTS), null));
+		assertThat(profileService.get(profile.id).bio()).isNull();
 	}
 
 	@Test

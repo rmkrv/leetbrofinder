@@ -65,6 +65,7 @@ public class ProfileService {
         Profile p = auth.require(key);
         p.preferredLanguage = request.preferredLanguage().trim();
         p.timezone = request.timezone().trim();
+        if (request.bio() != null) p.bio = trimToNull(request.bio());
         String contactType = trimToNull(request.contactType());
         String contactUsername = trimToNull(request.contactUsername());
         if ((contactType == null) != (contactUsername == null)) {

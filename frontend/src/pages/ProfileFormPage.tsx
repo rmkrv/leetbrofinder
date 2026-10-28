@@ -18,6 +18,7 @@ export default function ProfileFormPage() {
   const [form, setForm] = useState({
     preferredLanguage: '',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    bio: '',
     contactType: '',
     contactUsername: '',
     activities: [] as ActivityType[],
@@ -41,6 +42,7 @@ export default function ProfileFormPage() {
         ...current,
         preferredLanguage: profile.preferredLanguage || '',
         timezone: profile.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        bio: profile.bio || '',
         contactType: profile.contactType || '',
         contactUsername: profile.contactUsername || '',
         activities: profile.activities || [],
@@ -86,6 +88,7 @@ export default function ProfileFormPage() {
       await updateMe({
         preferredLanguage: form.preferredLanguage,
         timezone: form.timezone,
+        bio: form.bio,
         contactType: form.contactType,
         contactUsername: form.contactUsername,
         activities: form.activities,
@@ -121,6 +124,7 @@ export default function ProfileFormPage() {
         <label>LeetCode username<input name="username" autoComplete="username" value={username} readOnly/></label>
         <label>Preferred language<input name="preferredLanguage" autoComplete="off" required maxLength={40} value={form.preferredLanguage} onChange={event => setForm({ ...form, preferredLanguage: event.target.value })} placeholder="e.g. C++, Python, Java"/></label>
         <label>Timezone<input name="profileTimezone" autoComplete="off" required maxLength={64} value={form.timezone} onChange={event => setForm({ ...form, timezone: event.target.value })} placeholder="e.g. Europe/Warsaw"/></label>
+        <label>Bio <small>Optional · {form.bio.length}/70</small><input name="bio" autoComplete="off" maxLength={70} value={form.bio} onChange={event => setForm({ ...form, bio: event.target.value })} placeholder="A little about your practice goals"/></label>
         <label>Contact method <small>Optional</small><select name="contactType" autoComplete="off" value={form.contactType} onChange={event => setForm({ ...form, contactType: event.target.value, contactUsername: event.target.value ? form.contactUsername : '' })}><option value="">No external contact</option><option>Discord</option><option>Telegram</option><option>LinkedIn</option><option>Other</option></select></label>
         <label>Contact username <small>Optional</small><input name="contactUsername" autoComplete="off" required={Boolean(form.contactType)} disabled={!form.contactType} maxLength={100} value={form.contactUsername} onChange={event => setForm({ ...form, contactUsername: event.target.value })} placeholder={form.contactType ? `Your ${form.contactType} username` : 'Choose a method first'}/></label>
       </div>

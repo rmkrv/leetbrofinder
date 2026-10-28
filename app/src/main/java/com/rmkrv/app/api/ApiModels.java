@@ -20,7 +20,7 @@ public final class ApiModels {
     ) {}
 
     public record ProfileResponse(
-        UUID id, String leetcodeUsername, String preferredLanguage, String timezone,
+        UUID id, String leetcodeUsername, String preferredLanguage, String timezone, String bio,
         String contactType, String contactUsername, Set<ActivityType> activities, boolean lookingNow, Instant lastSeenAt,
         boolean verified, boolean hasPassword, String avatarUrl, int totalSolved, int easySolved, int mediumSolved,
         int hardSolved, Double contestRating, Integer contestRanking, int contestsAttended,
@@ -30,6 +30,7 @@ public final class ApiModels {
     public record UpdateProfileRequest(
         @NotBlank @Size(max = 40) @Pattern(regexp = "^[\\p{L}\\p{N} .+#_-]+$", message = "contains unsupported characters") String preferredLanguage,
         @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Za-z0-9_+./-]+$", message = "must be a valid timezone") String timezone,
+        @Size(max = 70) @Pattern(regexp = "^[^\\p{Cntrl}]*$", message = "must be one line") String bio,
         @Size(max = 30) @Pattern(regexp = "^$|^[A-Za-z][A-Za-z0-9 ._-]*$", message = "contains unsupported characters") String contactType,
         @Size(max = 100) @Pattern(regexp = "^$|^[A-Za-z0-9@._+#-]+$", message = "must be a username, not a link") String contactUsername,
         @NotEmpty Set<ActivityType> activities,
