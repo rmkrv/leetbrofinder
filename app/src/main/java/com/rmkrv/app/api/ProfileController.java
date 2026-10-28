@@ -3,6 +3,8 @@ package com.rmkrv.app.api;
 import com.rmkrv.app.api.ApiModels.*;
 import com.rmkrv.app.domain.*;
 import com.rmkrv.app.service.ProfileService;
+import com.rmkrv.app.service.ProfilePresence;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -13,7 +15,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/profiles")
 public class ProfileController {
     private final ProfileService profiles;
-    public ProfileController(ProfileService profiles) { this.profiles = profiles; }
+    private final ProfilePresence presence;
+    public ProfileController(ProfileService profiles, ProfilePresence presence) { this.profiles = profiles; this.presence = presence; }
+
+    @GetMapping(value = "/presence/events", produces = "text/event-stream")
+    public SseEmitter presenceEvents() { return presence.subscribe(); }
 
     @GetMapping
     public Page<ProfileResponse> search(
@@ -33,7 +39,9 @@ public class ProfileController {
     public ProfileResponse me(@RequestHeader(value = "X-Profile-Key", required = false) String key) { return profiles.me(key); }
 
     @PostMapping("/me/presence") @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void markPresent(@RequestHeader(value = "X-Profile-Key", required = false) String key) { profiles.markPresent(key); }
+    public void markPresent(@RequestHeader(value = "X-Profile-Key", required = false) String key,
+            @RequestParam(defaultValue = "00000000-0000-0000-0000-000000000000") UUID client,
+            @RequestParam(defaultValue = "true") boolean active) { profiles.markPresent(key, client, active); }
 
     @GetMapping("/{id}")
     public ProfileResponse get(@PathVariable UUID id) { return profiles.get(id); }

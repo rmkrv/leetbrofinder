@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, Copy, ExternalLink, MessageCircle, Trophy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { getProfile, getProfileKey, startConversation } from '../api'
+import { getProfile, getProfileKey, startConversation, PROFILE_PRESENCE_EVENT } from '../api'
 import { activityLabel, presenceLabel } from '../components/BroCard'
 import type { Profile } from '../types'
 
@@ -17,8 +17,14 @@ export default function UserProfilePage() {
     let active = true
     const load = () => { void getProfile(id).then(result => { if (active) setProfile(result) }).catch(error => { if (active) setError(error.message) }) }
     load()
+    const presence = (event: Event) => {
+      const status = (event as CustomEvent<Pick<Profile, 'id' | 'lookingNow' | 'lastSeenAt'>>).detail
+      if (!status) { load(); return }
+      if (status.id === id) setProfile(current => current ? { ...current, ...status } : current)
+    }
+    window.addEventListener(PROFILE_PRESENCE_EVENT, presence)
     const poll = window.setInterval(load, 60_000)
-    return () => { active = false; window.clearInterval(poll) }
+    return () => { active = false; window.clearInterval(poll); window.removeEventListener(PROFILE_PRESENCE_EVENT, presence) }
   }, [id])
 
   const message = async () => {

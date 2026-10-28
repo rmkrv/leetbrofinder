@@ -118,7 +118,6 @@ class AppApplicationTests {
 	}
 
 	@Test
-	@Transactional
 	void derivesPresenceFromTheLastVisibleHeartbeat() {
 		Profile profile = sessionProfile("presenceUser", "presence#1234", 1500);
 		profiles.saveAndFlush(profile);
@@ -126,19 +125,21 @@ class AppApplicationTests {
 		assertThat(profileService.me(session.sessionToken()).lookingNow()).isFalse();
 
 		profileService.markPresent(session.sessionToken());
-		entityManager.flush();
-		entityManager.clear();
 		var online = profileService.me(session.sessionToken());
 		assertThat(online.lookingNow()).isTrue();
 		assertThat(online.lastSeenAt()).isNotNull();
 		assertThat(profileService.search(null, null, null, null, null, true, null, 0, 24).getContent())
 			.extracting(item -> item.id()).contains(profile.id);
 
-		profiles.updateLastSeenAt(profile.id, Instant.now().minusSeconds(180));
-		entityManager.clear();
+		profileService.markPresent(session.sessionToken(), new UUID(0, 0), false);
 		assertThat(profileService.me(session.sessionToken()).lookingNow()).isFalse();
+		assertThat(profileService.me(session.sessionToken()).lastSeenAt()).isAfter(online.lastSeenAt());
 		assertThat(profileService.search(null, null, null, null, null, true, null, 0, 24).getContent())
 			.extracting(item -> item.id()).doesNotContain(profile.id);
+		profileService.markPresent(session.sessionToken());
+		assertThat(profileService.get(profile.id).lookingNow()).isTrue();
+		auth.logout(session.sessionToken());
+		assertThat(profileService.get(profile.id).lookingNow()).isFalse();
 	}
 
 	@Test

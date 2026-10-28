@@ -23,13 +23,15 @@ public class ProfileAuthService {
     private final ProfileRepository profiles;
     private final LoginSessionRepository sessions;
     private final ProfileMapper mapper;
+    private final ProfilePresence presence;
     private final BCryptPasswordEncoder passwords = new BCryptPasswordEncoder(12);
     private final SecureRandom random = new SecureRandom();
 
-    public ProfileAuthService(ProfileRepository profiles, LoginSessionRepository sessions, ProfileMapper mapper) {
+    public ProfileAuthService(ProfileRepository profiles, LoginSessionRepository sessions, ProfileMapper mapper, ProfilePresence presence) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.mapper = mapper;
+        this.presence = presence;
     }
 
     public String newKey() {
@@ -82,7 +84,14 @@ public class ProfileAuthService {
 
     @Transactional
     public void logout(String rawToken) {
-        if (rawToken != null && !rawToken.isBlank()) sessions.deleteByTokenHash(hash(rawToken));
+        if (rawToken != null && !rawToken.isBlank()) {
+            String sessionHash = hash(rawToken);
+            sessions.deleteByTokenHash(sessionHash);
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override public void afterCommit() { presence.logout(sessionHash); }
+                });
+        }
     }
 
     public void setPassword(Profile profile, String rawPassword) {

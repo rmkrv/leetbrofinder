@@ -56,13 +56,31 @@ export type ProfileFilters = { query?: string; language?: string; lookingNow?: s
 export async function searchProfiles(filters: ProfileFilters): Promise<PageResponse<Profile>> { const params = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)) }); return request(`/api/profiles?${params.toString()}`) }
 export const getProfile = (id: string) => request<Profile>(`/api/profiles/${id}`)
 export const getMe = () => request<Profile>('/api/profiles/me')
-export const markPresent = async () => { await request<void>('/api/profiles/me/presence', { method: 'POST' }); window.dispatchEvent(new Event(PROFILE_PRESENCE_EVENT)) }
+const presenceClient = crypto.randomUUID()
+let presenceQueue = Promise.resolve()
+export const markPresent = (active = true) => {
+  const key = getProfileKey()
+  if (!key) return Promise.resolve()
+  presenceQueue = presenceQueue.catch(() => {}).then(async () => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/me/presence?client=${presenceClient}&active=${active}`, {
+      method: 'POST', headers: { 'X-Profile-Key': key }, keepalive: true,
+    })
+    if (!response.ok) throw new Error('Could not update presence')
+  })
+  return presenceQueue
+}
+export function subscribePresence() {
+  const stream = new EventSource(`${API_BASE_URL}/api/profiles/presence/events`)
+  stream.addEventListener('ready', () => window.dispatchEvent(new Event(PROFILE_PRESENCE_EVENT)))
+  stream.addEventListener('presence', event => window.dispatchEvent(new CustomEvent(PROFILE_PRESENCE_EVENT, { detail: JSON.parse((event as MessageEvent).data) })))
+  return () => stream.close()
+}
 export const updateMe = (body: { preferredLanguage: string; timezone: string; bio: string; contactType: string; contactUsername: string; activities: ActivityType[]; password?: string }) => request<Profile>('/api/profiles/me', { method: 'PATCH', body: JSON.stringify(body) })
 export const startVerification = (username: string) => request<Challenge>('/api/verification/start', { method: 'POST', body: JSON.stringify({ username }) }, false)
 export const confirmVerification = (id: string) => request<AuthResult>(`/api/verification/${id}/confirm`, { method: 'POST' }, false)
 export const login = (username: string, password: string, rememberMe: boolean) => request<AuthResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password, rememberMe }) }, false)
 export async function logout() {
-  try { await request<void>('/api/auth/logout', { method: 'POST' }) } finally { clearProfileKey() }
+  try { await markPresent(false).catch(() => {}); await request<void>('/api/auth/logout', { method: 'POST' }) } finally { clearProfileKey() }
 }
 export const listConversations = () => request<Conversation[]>('/api/conversations')
 export const getUnreadCount = () => request<{ unreadCount: number }>('/api/conversations/unread-count')

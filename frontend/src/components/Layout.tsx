@@ -1,11 +1,12 @@
 import { Code2, Headphones, LogIn, LogOut, MessageCircle, Users, UserRoundPlus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { getProfileKey, getUnreadCount, logout, markPresent, PROFILE_AUTH_EVENT, UNREAD_CHANGED_EVENT } from '../api'
+import { getProfileKey, getUnreadCount, logout, markPresent, subscribePresence, PROFILE_AUTH_EVENT, UNREAD_CHANGED_EVENT } from '../api'
 export default function Layout() {
   const [hasProfile, setHasProfile] = useState(() => Boolean(getProfileKey()))
   const [unreadCount, setUnreadCount] = useState(0)
   const navigate = useNavigate()
+  useEffect(() => subscribePresence(), [])
   useEffect(() => {
     const syncAuth = () => setHasProfile(Boolean(getProfileKey()))
     window.addEventListener(PROFILE_AUTH_EVENT, syncAuth)
@@ -23,11 +24,15 @@ export default function Layout() {
   }, [hasProfile])
   useEffect(() => {
     if (!hasProfile) return
-    const heartbeat = () => { if (document.visibilityState === 'visible') void markPresent().catch(() => {}) }
+    const heartbeat = () => { void markPresent(document.visibilityState === 'visible').catch(() => {}) }
+    const leave = () => { void markPresent(false).catch(() => {}) }
     heartbeat()
-    const poll = window.setInterval(heartbeat, 60_000)
+    const poll = window.setInterval(() => { if (document.visibilityState === 'visible') heartbeat() }, 10_000)
     document.addEventListener('visibilitychange', heartbeat)
-    return () => { window.clearInterval(poll); document.removeEventListener('visibilitychange', heartbeat) }
+    window.addEventListener('pagehide', leave)
+    window.addEventListener('pageshow', heartbeat)
+    window.addEventListener('online', heartbeat)
+    return () => { window.clearInterval(poll); document.removeEventListener('visibilitychange', heartbeat); window.removeEventListener('pagehide', leave); window.removeEventListener('pageshow', heartbeat); window.removeEventListener('online', heartbeat) }
   }, [hasProfile])
   const signOut = async () => { await logout().catch(() => {}); navigate('/login') }
   return <div className="app-shell">

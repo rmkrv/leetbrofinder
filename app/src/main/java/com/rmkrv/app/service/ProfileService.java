@@ -5,7 +5,6 @@ import com.rmkrv.app.domain.*;
 import com.rmkrv.app.repository.ProfileRepository;
 import com.rmkrv.app.web.NotFoundException;
 import jakarta.persistence.criteria.JoinType;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import org.springframework.data.domain.*;
@@ -19,8 +18,10 @@ public class ProfileService {
     private final ProfileAuthService auth;
     private final LeetCodeClient leetCode;
     private final ProfileMapper mapper;
-    public ProfileService(ProfileRepository profiles, ProfileAuthService auth, LeetCodeClient leetCode, ProfileMapper mapper) {
+    private final ProfilePresence presence;
+    public ProfileService(ProfileRepository profiles, ProfileAuthService auth, LeetCodeClient leetCode, ProfileMapper mapper, ProfilePresence presence) {
         this.profiles = profiles; this.auth = auth; this.leetCode = leetCode; this.mapper = mapper;
+        this.presence = presence;
     }
 
     @Transactional(readOnly = true)
@@ -33,8 +34,8 @@ public class ProfileService {
         if (maxRating != null) spec = spec.and((root,cq,cb) -> cb.lessThanOrEqualTo(root.get("contestRating"), maxRating.doubleValue()));
         if (language != null && !language.isBlank()) spec = spec.and((root,cq,cb) -> cb.equal(cb.lower(root.get("preferredLanguage")), language.toLowerCase()));
         if (Boolean.TRUE.equals(lookingNow)) {
-            Instant cutoff = Instant.now().minus(Duration.ofMinutes(2));
-            spec = spec.and((root,cq,cb) -> cb.greaterThan(root.get("lastSeenAt"), cutoff));
+            Set<UUID> online = presence.onlineIds();
+            spec = spec.and((root,cq,cb) -> online.isEmpty() ? cb.disjunction() : root.get("id").in(online));
         }
         if (timezone != null && !timezone.isBlank()) spec = spec.and((root,cq,cb) -> cb.equal(root.get("timezone"), timezone));
         if (activity != null) spec = spec.and((root,cq,cb) -> { cq.distinct(true); return cb.equal(root.join("activities", JoinType.INNER), activity); });
@@ -55,9 +56,17 @@ public class ProfileService {
     public ProfileResponse me(String key) { return mapper.toResponse(auth.require(key)); }
 
     @Transactional
-    public void markPresent(String key) {
+    public void markPresent(String key) { markPresent(key, new UUID(0, 0), true); }
+
+    @Transactional
+    public void markPresent(String key, UUID client, boolean active) {
         Profile p = auth.require(key);
-        profiles.updateLastSeenAt(p.id, Instant.now());
+        Instant now = Instant.now();
+        profiles.updateLastSeenAt(p.id, now);
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+            new org.springframework.transaction.support.TransactionSynchronization() {
+                @Override public void afterCommit() { presence.update(p.id, auth.hash(key), client, active, now); }
+            });
     }
 
     @Transactional

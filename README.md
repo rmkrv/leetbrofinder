@@ -66,6 +66,8 @@ VITE_API_URL=https://leetbrofinder-api-830799638465.europe-central2.run.app
 
 The API runs as the public Cloud Run service `leetbrofinder-api` in `europe-central2`. It scales from zero to a maximum of one instance with 1 CPU and 512 MiB of memory. Database credentials are supplied through Google Secret Manager and are never stored in the repository.
 
+Presence changes are pushed to browsers over server-sent events. Visible tabs renew an in-memory lease every 10 seconds; hiding or closing a tab and logging out release it immediately. Lost connections expire after 35 seconds. Last-seen timestamps remain in Postgres. This presence registry relies on the one-instance deployment; use shared presence storage and pub/sub before increasing the instance count. After an API restart, visible tabs restore their presence on their next heartbeat.
+
 ## API highlights
 
 - `POST /api/verification/start`

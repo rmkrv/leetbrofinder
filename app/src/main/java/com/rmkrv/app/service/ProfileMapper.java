@@ -2,13 +2,15 @@ package com.rmkrv.app.service;
 
 import com.rmkrv.app.api.ApiModels.*;
 import com.rmkrv.app.domain.Profile;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ProfileMapper {
+    private final ProfilePresence presence;
+    public ProfileMapper() { this(new ProfilePresence()); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public ProfileMapper(ProfilePresence presence) { this.presence = presence; }
     public ProfileResponse toResponse(Profile p) { return toResponse(p, null); }
 
     public ProfileResponse toResponse(Profile p, LeetCodeSnapshot live) {
@@ -21,7 +23,7 @@ public class ProfileMapper {
         return new ProfileResponse(
             p.id, p.leetcodeUsername, p.preferredLanguage, p.timezone, p.bio,
             includeContact ? p.contactType : null, includeContact ? p.contactUsername : null,
-            p.activities, p.lastSeenAt != null && p.lastSeenAt.isAfter(Instant.now().minus(Duration.ofMinutes(2))),
+            p.activities, presence.isOnline(p.id),
             p.lastSeenAt, p.verified, p.passwordHash != null, p.avatarUrl,
             live == null ? p.totalSolved : live.totalSolved(),
             live == null ? p.easySolved : live.easySolved(),
