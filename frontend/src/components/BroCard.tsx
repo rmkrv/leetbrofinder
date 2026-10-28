@@ -4,7 +4,7 @@ import type { Profile } from '../types'
 export const activityLabel=(v:string)=>({RANDOM_PROBLEMS:'Random problems',CONTESTS:'Contests',DSA_PRACTICE:'DSA practice',INTERVIEW_PREP:'Interview prep'}[v]||v)
 export const presenceLabel = (profile: Profile, detailed = false) => {
   if (profile.lookingNow) return 'Looking now'
-  if (!profile.lastSeenAt) return 'Not seen yet'
+  if (!profile.lastSeenAt) return 'Seen recently'
   const seen = new Date(profile.lastSeenAt)
   return `Last seen ${seen.toLocaleString(undefined, detailed
     ? { dateStyle: 'medium', timeStyle: 'short' }
