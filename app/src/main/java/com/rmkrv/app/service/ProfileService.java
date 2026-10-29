@@ -44,12 +44,17 @@ public class ProfileService {
     }
 
     @Transactional(readOnly = true)
-    public ProfileResponse get(UUID id) {
+    public ProfileResponse get(UUID id) { return get(id, null); }
+
+    @Transactional(readOnly = true)
+    public ProfileResponse get(UUID id, String key) {
         Profile p = profiles.findById(id).filter(profile -> profile.verified && profile.setupComplete)
             .orElseThrow(() -> new NotFoundException("Profile not found"));
+        boolean includeContact = key != null && !key.isBlank();
+        if (includeContact) auth.require(key);
         LeetCodeSnapshot live;
         try { live = leetCode.fetch(p.leetcodeUsername); } catch (RuntimeException ignored) { live = null; }
-        return mapper.toResponse(p, live, true);
+        return mapper.toResponse(p, live, includeContact);
     }
 
     @Transactional(readOnly = true)

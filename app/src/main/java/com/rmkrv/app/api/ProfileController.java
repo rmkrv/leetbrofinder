@@ -44,7 +44,8 @@ public class ProfileController {
             @RequestParam(defaultValue = "true") boolean active) { profiles.markPresent(key, client, active); }
 
     @GetMapping("/{id}")
-    public ProfileResponse get(@PathVariable UUID id) { return profiles.get(id); }
+    public ProfileResponse get(@PathVariable UUID id,
+            @RequestHeader(value = "X-Profile-Key", required = false) String key) { return profiles.get(id, key); }
 
     @PatchMapping("/me")
     public ProfileResponse update(@RequestHeader(value = "X-Profile-Key", required = false) String key,

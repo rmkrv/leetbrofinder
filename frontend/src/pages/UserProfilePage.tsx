@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, Copy, ExternalLink, MessageCircle, Trophy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { getProfile, getProfileKey, startConversation, PROFILE_PRESENCE_EVENT } from '../api'
+import { getProfile, getProfileKey, startConversation, PROFILE_AUTH_EVENT, PROFILE_PRESENCE_EVENT } from '../api'
 import { activityLabel, presenceLabel } from '../components/BroCard'
 import type { Profile } from '../types'
 
@@ -11,6 +11,14 @@ export default function UserProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [signedIn, setSignedIn] = useState(() => Boolean(getProfileKey()))
+
+  useEffect(() => {
+    const syncAuth = () => setSignedIn(Boolean(getProfileKey()))
+    window.addEventListener(PROFILE_AUTH_EVENT, syncAuth)
+    window.addEventListener('storage', syncAuth)
+    return () => { window.removeEventListener(PROFILE_AUTH_EVENT, syncAuth); window.removeEventListener('storage', syncAuth) }
+  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -65,7 +73,7 @@ export default function UserProfilePage() {
         <div><h1>{profile.leetcodeUsername} <span>✓</span></h1><p>{profile.preferredLanguage || 'Language not set'} · {profile.timezone || 'Timezone not set'} · {presenceLabel(profile, true)}</p>{profile.bio && <p className="profile-detail-bio">{profile.bio}</p>}</div>
         <div className="profile-cta">
           <button className="primary" onClick={message}><MessageCircle size={17}/> Message</button>
-          {profile.contactUsername && (contactHref
+          {signedIn && profile.contactUsername && (contactHref
             ? <a className="secondary" href={contactHref} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> {profile.contactType}: {profile.contactUsername}</a>
             : <button className="secondary" onClick={copyContact}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? 'Copied' : `${profile.contactType}: ${profile.contactUsername}`}</button>)}
         </div>
