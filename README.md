@@ -42,6 +42,8 @@ LeetBroFinder is a small, non-commercial app for finding LeetCode practice partn
 
 Open `http://localhost:5173`.
 
+To preview the frontend against the deployed API without starting the local API or PostgreSQL, create `frontend/.env.local` with `API_PROXY_TARGET=https://leetbrofinder-api-830799638465.europe-central2.run.app`, then run `npm run dev` from `frontend`. Requests to `/api` stay on the Vite origin and are proxied to the deployed service. This uses live application data.
+
 ## Verification
 
 The app generates a short token such as `leetbro-verify-a1b2...`. The user adds it to their public LeetCode **About** section, then asks the app to check it. LeetBroFinder never requests a LeetCode password, cookie, or session token. After verification, the user finishes setup and creates a separate LeetBroFinder password. Passwords are stored as BCrypt hashes, never as plaintext.

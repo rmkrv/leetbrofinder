@@ -153,6 +153,7 @@ export default function MessagesPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState('')
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
+  const [initializing, setInitializing] = useState(!snapshot.myProfileId)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const composerFormRef = useRef<HTMLFormElement>(null)
 
@@ -189,6 +190,7 @@ export default function MessagesPage() {
         return next
       })
     }).catch(cause => { if (!stopped) setError(cause instanceof Error ? cause.message : 'Could not initialize messaging') })
+      .finally(() => { if (!stopped) setInitializing(false) })
     return () => { stopped = true }
   }, [snapshot])
 
@@ -341,55 +343,46 @@ export default function MessagesPage() {
     }
   }
 
-  if (!getProfileKey()) return <main className="narrow-page"><div className="surface blocked"><MessageCircle size={28}/><h2>Log in to see your conversations</h2><Link className="primary" to="/login">Log in</Link></div></main>
+  if (!getProfileKey()) return <main className="mx-auto max-w-xl px-4 py-16"><div className="card card-border bg-base-200"><div className="card-body items-center text-center"><MessageCircle className="text-secondary" size={28}/><h1 className="card-title">Log in to see your conversations</h1><p className="text-base-content/70">Private messages are tied to your verified profile and this device.</p><Link className="btn btn-primary mt-3" to="/login">Log in</Link></div></div></main>
 
-  return <main className="messages-page">
-    <div className="page-heading"><p>Messages are end-to-end encrypted.</p></div>
-    {error && <div className="notice error">{error}</div>}
-    <div className="message-shell surface">
-      <aside>
-        <h2>Inbox</h2>
-        {conversations.map(conversation => {
+  return <main className="mx-auto max-w-6xl px-3 py-8 sm:px-6 lg:py-12">
+    <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-2 font-mono text-xs text-secondary">// private channel</p><h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Messages</h1></div><p className="flex items-center gap-2 text-sm text-base-content/68"><span className="status status-success"></span>Messages are end-to-end encrypted.</p></header>
+    {error && <div role="alert" className="alert alert-error alert-soft mb-4"><span>{error}</span></div>}
+    <div className="grid min-h-[39rem] overflow-hidden rounded-box border border-base-300 bg-base-200/80 lg:grid-cols-[19rem_1fr]">
+      <aside className="border-b border-base-300 p-3 lg:border-r lg:border-b-0">
+        <h2 className="px-3 py-2 font-mono text-xs text-base-content/65">Inbox</h2>
+        {initializing ? <div className="space-y-2 p-2">{Array.from({length: 3}).map((_, index) => <div className="skeleton h-16 w-full" key={index}></div>)}</div> : <ul className="menu w-full gap-1 p-0">{conversations.map(conversation => {
           const username = displayName(conversation.otherProfile?.leetcodeUsername)
           const preview = conversation.lastMessage?.cryptoVersion ? 'Encrypted message' : conversation.lastMessage?.content || 'New conversation'
-          return <button key={conversation.id} className={selected === conversation.id ? 'active' : ''} onClick={() => selectConversation(conversation.id)}>
-            <span className="mini-avatar">{initials(username)}</span>
-            <span><strong>{username}</strong><small>{preview}</small></span>
-            {conversation.unreadCount > 0 && <span className="unread-badge" aria-label={`${conversation.unreadCount} unread messages`}>{conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}</span>}
-          </button>
-        })}
-        {!conversations.length && <div className="inbox-empty"><p>No conversations yet.</p><Link to="/">Browse profiles</Link></div>}
+          return <li key={conversation.id}><button className={`grid grid-cols-[auto_1fr_auto] items-center gap-3 ${selected === conversation.id ? 'menu-active' : ''}`} onClick={() => selectConversation(conversation.id)}>
+            <div className="avatar avatar-placeholder"><div className="grid size-9 place-items-center rounded-selector bg-neutral font-mono text-xs text-neutral-content">{initials(username)}</div></div>
+            <span className="min-w-0 text-left"><strong className="block truncate text-sm">{username}</strong><small className="block truncate text-base-content/65">{preview}</small></span>
+            {conversation.unreadCount > 0 && <span className="badge badge-secondary badge-sm" aria-label={`${conversation.unreadCount} unread messages`}>{conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}</span>}
+          </button></li>
+        })}</ul>}
+        {!initializing && !conversations.length && <div className="grid place-items-center px-4 py-12 text-center"><MessageCircle className="mb-3 text-base-content/50"/><p className="text-sm text-base-content/68">No conversations yet.</p><Link className="btn btn-ghost btn-sm mt-2" to="/">Browse profiles</Link></div>}
       </aside>
-      <section className="thread">
+      <section className="flex min-h-[32rem] min-w-0 flex-col">
         {active ? <>
-          <header>
-            <span className="mini-avatar">{initials(active.otherProfile?.leetcodeUsername)}</span>
-            <div><strong>{displayName(active.otherProfile?.leetcodeUsername)}</strong><small>{active.otherProfile?.preferredLanguage || 'Language not set'} · {active.otherProfile?.timezone || 'Timezone not set'}</small></div>
-            {active.otherProfile?.id && <Link to={`/profiles/${active.otherProfile.id}`}>View profile</Link>}
+          <header className="flex items-center gap-3 border-b border-base-300 px-4 py-3 sm:px-5">
+            <div className="avatar avatar-placeholder"><div className="grid size-9 place-items-center rounded-selector bg-neutral font-mono text-xs text-neutral-content">{initials(active.otherProfile?.leetcodeUsername)}</div></div>
+            <div className="min-w-0 flex-1"><strong className="block truncate text-sm">{displayName(active.otherProfile?.leetcodeUsername)}</strong><small className="block truncate text-base-content/65">{active.otherProfile?.preferredLanguage || 'Language not set'} · {active.otherProfile?.timezone || 'Timezone not set'}</small></div>
+            {active.otherProfile?.id && <Link className="btn btn-ghost btn-sm" to={`/profiles/${active.otherProfile.id}`}>View profile</Link>}
           </header>
-          <div className="message-list">{messages.map(message => {
+          <div className="flex max-h-[31rem] flex-1 flex-col gap-2 overflow-y-auto p-4 sm:p-5" aria-live="polite">{messages.map(message => {
             const mine = message.senderId === myProfileId
-            return <div key={message.id} className={mine ? 'message mine' : 'message'}>
-              <strong>{displayName(message.senderUsername)}</strong>
-              <p>{message.displayContent}</p>
-              {message.decryptionState === 'legacy' && <small>Sent before private messaging was enabled</small>}
-              <div className="message-meta">
-                <time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{message.editedAt && ' · edited'}</time>
-                {mine && editingId !== message.id && <span className="message-actions">
-                  <button onClick={() => startEditing(message)} disabled={message.decryptionState === 'failed' || busyId === message.id} aria-label="Edit message" title="Edit message"><Pencil size={12}/></button>
-                  <button className={deleteConfirmId === message.id ? 'confirm-delete' : ''} onClick={() => void removeMessage(message.id)} disabled={busyId === message.id} aria-label={deleteConfirmId === message.id ? 'Confirm delete message' : 'Delete message'} title={deleteConfirmId === message.id ? 'Click again to confirm' : 'Delete message'}><Trash2 size={12}/>{deleteConfirmId === message.id && <span>Confirm</span>}</button>
-                </span>}
-              </div>
+            return <div key={message.id} className={`chat ${mine ? 'chat-end' : 'chat-start'}`}>
+              <div className="chat-header text-xs text-base-content/65">{displayName(message.senderUsername)}</div>
+              <div className={`chat-bubble max-w-[min(34rem,85vw)] whitespace-pre-wrap break-words ${mine ? 'chat-bubble-neutral' : ''}`}><p>{message.displayContent}</p>{message.decryptionState === 'legacy' && <small className="mt-2 block text-warning">Sent before private messaging was enabled</small>}</div>
+              <div className="chat-footer mt-1 flex items-center gap-2 text-[.68rem] text-base-content/60"><time>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{message.editedAt && ' · edited'}</time>{mine && editingId !== message.id && <span className="flex gap-1"><button className="btn btn-ghost btn-square btn-xs" onClick={() => startEditing(message)} disabled={message.decryptionState === 'failed' || busyId === message.id} aria-label="Edit message" title="Edit message"><Pencil size={12}/></button><button className={`btn btn-square btn-xs ${deleteConfirmId === message.id ? 'btn-error' : 'btn-ghost'}`} onClick={() => void removeMessage(message.id)} disabled={busyId === message.id} aria-label={deleteConfirmId === message.id ? 'Confirm delete message' : 'Delete message'} title={deleteConfirmId === message.id ? 'Click again to confirm' : 'Delete message'}><Trash2 size={12}/></button></span>}</div>
             </div>
-          })}</div>
-          <form ref={composerFormRef} className="message-composer" onSubmit={submit}>
-            {editingId && <div className="composer-edit-banner"><span><Pencil size={14}/> Editing message</span><button type="button" onClick={cancelEdit} disabled={busyId === editingId} aria-label="Cancel edit"><X size={16}/></button></div>}
-            <div className="composer-input-row">
-              <textarea ref={composerRef} rows={1} value={editingId ? editDraft : draft} onChange={event => editingId ? setEditDraft(event.target.value) : changeDraft(event.target.value)} onKeyDown={event => sendOnEnter(event, composerFormRef.current)} maxLength={1000} placeholder={editingId ? 'Edit your message…' : messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label={editingId ? 'Edit message' : 'Message'} disabled={!messagingReady || Boolean(busyId)}/>
-              <button aria-label={editingId ? 'Save edit' : 'Send message'} disabled={!(editingId ? editDraft : draft).trim() || !messagingReady || Boolean(busyId)}>{editingId ? <Check size={18}/> : <Send size={18}/>}</button>
-            </div>
+          })}{messages.length === 0 && <div className="m-auto text-center text-sm text-base-content/60"><MessageCircle className="mx-auto mb-3"/><p>No messages yet. Start with a practice goal.</p></div>}</div>
+          <form ref={composerFormRef} className="border-t border-base-300 p-3 sm:p-4" onSubmit={submit}>
+            {editingId && <div className="alert alert-info alert-soft mb-3 py-2"><Pencil size={14}/><span className="text-sm">Editing message</span><button className="btn btn-ghost btn-square btn-xs ml-auto" type="button" onClick={cancelEdit} disabled={busyId === editingId} aria-label="Cancel edit"><X size={16}/></button></div>}
+            {!messagingReady && active && <p className="mb-2 flex items-center gap-2 text-xs text-base-content/65"><span className="loading loading-spinner loading-xs"></span>Preparing private messaging on this device…</p>}
+            <div className="flex items-end gap-2"><textarea className="textarea min-h-11 flex-1 resize-none" ref={composerRef} rows={1} value={editingId ? editDraft : draft} onChange={event => editingId ? setEditDraft(event.target.value) : changeDraft(event.target.value)} onKeyDown={event => sendOnEnter(event, composerFormRef.current)} maxLength={1000} placeholder={editingId ? 'Edit your message…' : messagingReady ? 'Write a message…' : 'Messaging isn’t ready yet…'} aria-label={editingId ? 'Edit message' : 'Message'} disabled={!messagingReady || Boolean(busyId)}/><button className="btn btn-primary btn-square" aria-label={editingId ? 'Save edit' : 'Send message'} disabled={!(editingId ? editDraft : draft).trim() || !messagingReady || Boolean(busyId)}>{busyId ? <span className="loading loading-spinner loading-sm"></span> : editingId ? <Check size={18}/> : <Send size={18}/>}</button></div>
           </form>
-        </> : <div className="thread-empty"><MessageCircle/><h2>Pick a conversation</h2></div>}
+        </> : <div className="m-auto grid place-items-center p-8 text-center"><MessageCircle className="mb-4 text-base-content/50"/><h2 className="text-xl font-semibold">Pick a conversation</h2><p className="mt-2 text-sm text-base-content/65">Your encrypted thread will open here.</p></div>}
       </section>
     </div>
   </main>

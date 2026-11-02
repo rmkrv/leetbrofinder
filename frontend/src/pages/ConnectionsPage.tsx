@@ -54,6 +54,7 @@ export default function ConnectionsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busyId, setBusyId] = useState('')
+  const [loading, setLoading] = useState(!initialSnapshot)
   const navigate = useNavigate()
 
   const load = useCallback(async (force = false) => {
@@ -64,6 +65,8 @@ export default function ConnectionsPage() {
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load connections')
+    } finally {
+      setLoading(false)
     }
   }, [profileKey])
 
@@ -118,7 +121,7 @@ export default function ConnectionsPage() {
   }
 
   if (!getProfileKey()) {
-    return <main className="narrow-page"><div className="surface blocked"><Users/><h2>Log in to see connections</h2><Link className="primary" to="/login">Log in</Link></div></main>
+    return <main className="mx-auto max-w-xl px-4 py-16"><div className="card card-border bg-base-200"><div className="card-body items-center text-center"><Users className="text-secondary"/><h1 className="card-title">Log in to see connections</h1><p className="text-base-content/70">Your coding network is tied to your verified profile.</p><Link className="btn btn-primary mt-3" to="/login">Log in</Link></div></div></main>
   }
 
   const incoming = invites.filter(item => item.status === 'PENDING' && item.direction === 'INCOMING')
@@ -126,59 +129,50 @@ export default function ConnectionsPage() {
   const readyFor = (profileId: string) => invites.find(item => item.status === 'ACCEPTED' && item.sessionId && item.otherPlayer.id === profileId)
 
   return (
-    <main className="connections-page">
-      <div className="page-heading">
-        <p className="eyebrow">Your network</p>
-        <h1>Connections</h1>
-        <p>Invite an existing connection into a private live coding session.</p>
-      </div>
+    <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:py-16">
+      <header className="mb-9"><p className="mb-3 font-mono text-xs text-secondary">// your network</p><h1 className="text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Connections</h1><p className="mt-4 max-w-2xl text-base-content/70">Invite an existing connection into a private live coding session.</p></header>
 
-      {error && <p className="form-error">{error}</p>}
-      {notice && <p className="form-success">{notice}</p>}
+      {error && <div role="alert" className="alert alert-error alert-soft mb-4"><span>{error}</span></div>}
+      {notice && <div role="status" className="alert alert-success alert-soft mb-4"><span>{notice}</span></div>}
+
+      {loading && <div className="space-y-3" aria-label="Loading connections">{Array.from({length: 3}).map((_, index) => <div className="skeleton h-24 w-full" key={index}></div>)}</div>}
 
       {incoming.length > 0 && (
-        <section className="session-invites">
-          <p className="eyebrow">Session requests</p>
+        <section className="mb-8">
+          <div className="mb-3 flex items-center gap-3"><span className="status status-info animate-pulse"></span><h2 className="font-mono text-xs text-secondary">Session requests</h2></div>
           {incoming.map(item => (
-            <article className="surface invite-row" key={item.id}>
-              <div className="mini-avatar">{item.otherPlayer.leetcodeUsername.slice(0, 2).toUpperCase()}</div>
-              <div>
-                <strong>{item.otherPlayer.leetcodeUsername}</strong>
-                <span><Clock3 size={14}/> wants to code together</span>
+            <article className="card card-border mb-3 bg-base-200" key={item.id}><div className="card-body flex-row flex-wrap items-center gap-4 p-5">
+              <div className="avatar avatar-placeholder"><div className="size-11 rounded-selector bg-neutral text-neutral-content"><span className="font-mono text-xs">{item.otherPlayer.leetcodeUsername.slice(0, 2).toUpperCase()}</span></div></div>
+              <div className="min-w-0 flex-1"><strong className="block truncate">{item.otherPlayer.leetcodeUsername}</strong><span className="mt-1 flex items-center gap-1 text-sm text-base-content/68"><Clock3 size={14}/>wants to code together</span></div>
+              <div className="flex w-full gap-2 sm:w-auto">
+                <button className="btn flex-1 sm:flex-none" disabled={busyId === item.id} onClick={() => void run(item.id, () => declineSessionInvite(item.id))}><X size={16}/>Decline</button>
+                <button className="btn btn-primary flex-1 sm:flex-none" disabled={busyId === item.id} onClick={() => void acceptInvite(item)}>{busyId === item.id ? <span className="loading loading-spinner loading-sm"></span> : <Play size={16}/>}Join session</button>
               </div>
-              <div className="invite-actions">
-                <button className="secondary" disabled={busyId === item.id} onClick={() => run(item.id, () => declineSessionInvite(item.id))}><X size={16}/> Decline</button>
-                <button className="primary" disabled={busyId === item.id} onClick={() => acceptInvite(item)}><Play size={16}/> Join session</button>
-              </div>
-            </article>
+            </div></article>
           ))}
         </section>
       )}
 
-      <div className="connection-list">
+      {!loading && <div className="space-y-3">
         {items.map(item => {
           const pending = pendingFor(item.otherProfile.id)
           const ready = readyFor(item.otherProfile.id)
           return (
-            <article className="surface connection-row" key={item.id}>
-              <div className="mini-avatar">{item.otherProfile.leetcodeUsername.slice(0, 2).toUpperCase()}</div>
-              <div>
-                <strong>{item.otherProfile.leetcodeUsername}</strong>
-                <span>{item.status === 'ACCEPTED' ? 'Connected' : item.direction === 'INCOMING' ? 'Wants to connect' : 'Request sent'}</span>
-                {item.status === 'ACCEPTED' && item.otherProfile.contactUsername && <a href={contactHref(item.otherProfile.contactType, item.otherProfile.contactUsername)} target="_blank" rel="noreferrer">{item.otherProfile.contactType}: {item.otherProfile.contactUsername}</a>}
+            <article className="card card-border bg-base-200/75" key={item.id}><div className="card-body flex-row flex-wrap items-center gap-4 p-5">
+              <div className="avatar avatar-placeholder"><div className="size-11 rounded-selector bg-neutral text-neutral-content"><span className="font-mono text-xs">{item.otherProfile.leetcodeUsername.slice(0, 2).toUpperCase()}</span></div></div>
+              <div className="min-w-0 flex-1"><strong className="block truncate">{item.otherProfile.leetcodeUsername}</strong><span className="mt-1 flex items-center gap-2 text-sm text-base-content/68"><span className={`status status-sm ${item.status === 'ACCEPTED' ? 'status-success' : 'status-warning'}`}></span>{item.status === 'ACCEPTED' ? 'Connected' : item.direction === 'INCOMING' ? 'Wants to connect' : 'Request sent'}</span>{item.status === 'ACCEPTED' && item.otherProfile.contactUsername && <a className="link link-hover mt-1 block text-sm text-secondary" href={contactHref(item.otherProfile.contactType, item.otherProfile.contactUsername)} target="_blank" rel="noreferrer">{item.otherProfile.contactType}: {item.otherProfile.contactUsername}</a>}</div>
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                {item.status === 'PENDING' && item.direction === 'INCOMING' && <button className="btn btn-primary" disabled={busyId === item.id} onClick={() => void acceptConnection(item.id)}><Check size={16}/>Accept</button>}
+                {item.status === 'ACCEPTED' && ready?.sessionId && <button className="btn btn-primary" onClick={() => openSession(ready.sessionId!)}><Play size={16}/>Open session</button>}
+                {item.status === 'ACCEPTED' && !ready && <button className="btn" disabled={Boolean(pending) || busyId === item.id} onClick={() => void invite(item)}>{busyId === item.id ? <span className="loading loading-spinner loading-sm"></span> : <UserPlus size={16}/>} {pending ? 'Request sent' : 'Request session'}</button>}
+                {item.status === 'ACCEPTED' && <Handshake className="ml-1 text-success" aria-label="Connected"/>}
               </div>
-              <div className="connection-actions">
-                {item.status === 'PENDING' && item.direction === 'INCOMING' && <button className="primary" disabled={busyId === item.id} onClick={() => acceptConnection(item.id)}><Check size={16}/> Accept</button>}
-                {item.status === 'ACCEPTED' && ready?.sessionId && <button className="primary" onClick={() => openSession(ready.sessionId!)}><Play size={16}/> Open session</button>}
-                {item.status === 'ACCEPTED' && !ready && <button className="secondary" disabled={Boolean(pending) || busyId === item.id} onClick={() => invite(item)}><UserPlus size={16}/> {pending ? 'Request sent' : 'Request session'}</button>}
-                {item.status === 'ACCEPTED' && <Handshake className="connected-icon"/>}
-              </div>
-            </article>
+            </div></article>
           )
         })}
-      </div>
+      </div>}
 
-      {items.length === 0 && <div className="surface empty-state"><Users/><h3>No connections yet</h3><p>Start a shared session, then send your coding partner a request.</p><Link className="primary" to="/session">Start a session</Link></div>}
+      {!loading && items.length === 0 && <div className="grid place-items-center rounded-box border border-dashed border-base-300 bg-base-200/45 px-6 py-16 text-center"><Users className="mb-4 text-base-content/55"/><h2 className="text-xl font-semibold">No connections yet</h2><p className="mt-2 max-w-md text-sm text-base-content/70">Start a shared session, then send your coding partner a request.</p><Link className="btn btn-primary mt-6" to="/session">Start a session</Link></div>}
     </main>
   )
 }

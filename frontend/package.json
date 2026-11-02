@@ -10,16 +10,19 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "latest",
+    "daisyui": "^5.7.50",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "react-router-dom": "latest"
+    "react-router-dom": "latest",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "typescript": "latest",
-    "vite": "latest"
+    "vite": "^8.3.5"
   }
 }
