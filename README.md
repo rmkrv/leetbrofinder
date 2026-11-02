@@ -54,7 +54,7 @@ Users log in with their LeetCode username and LeetBroFinder password. A normal l
 
 Copy `.env.example` values into your environment as needed. The frontend proxies `/api` to `http://localhost:8080` during development. Production builds set `VITE_API_URL` to the deployed API origin.
 
-The Spring Boot API reads `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. For Neon, use a direct JDBC URL (`jdbc:postgresql://...`) so the same connection can safely run Flyway migrations at startup. No database credentials are stored in application configuration or source control.
+The Spring Boot API reads `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. For Neon, use the pooled JDBC host for application traffic and startup migrations. The Hikari pool defaults to 10 connections with two warm idle connections and can be adjusted with `DB_POOL_SIZE` and `DB_POOL_MIN_IDLE`. No database credentials are stored in application configuration or source control.
 
 For local Docker Compose, set `POSTGRES_PASSWORD` for the container and export the `DB_*` values shown in `.env.example` before starting Spring Boot.
 
@@ -66,9 +66,9 @@ The frontend is deployed from the `frontend` directory on Vercel with:
 VITE_API_URL=https://leetbrofinder-api-830799638465.europe-central2.run.app
 ```
 
-The API runs as the public Cloud Run service `leetbrofinder-api` in `europe-central2`. It scales from zero to a maximum of one instance with 1 CPU and 512 MiB of memory. Database credentials are supplied through Google Secret Manager and are never stored in the repository.
+The API runs as the public Cloud Run service `leetbrofinder-api` in `europe-central2`. It keeps one warm instance, is capped at one instance because presence is currently in memory, and accepts 16 concurrent requests with 1 CPU and 512 MiB of memory. Database credentials are supplied through Google Secret Manager and are never stored in the repository.
 
-Presence changes are pushed to browsers over server-sent events. Visible tabs renew an in-memory lease every 10 seconds; hiding or closing a tab and logging out release it immediately. Lost connections expire after 35 seconds. Last-seen timestamps remain in Postgres. This presence registry relies on the one-instance deployment; use shared presence storage and pub/sub before increasing the instance count. After an API restart, visible tabs restore their presence on their next heartbeat.
+Presence changes are pushed to browsers over server-sent events. Visible tabs renew an in-memory lease every 20 seconds; hiding or closing a tab and logging out release it immediately. Lost connections expire after 35 seconds. Last-seen timestamps are persisted to Postgres at most once per minute while a tab remains visible and immediately when it leaves. This presence registry relies on the one-instance deployment; use shared presence storage and pub/sub before increasing the instance count. After an API restart, visible tabs restore their presence on their next heartbeat.
 
 ## API highlights
 

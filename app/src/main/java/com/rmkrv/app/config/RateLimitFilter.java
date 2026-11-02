@@ -21,7 +21,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.globalLimit = globalLimit; this.mapper = mapper;
     }
     @Override protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/") || request.getRequestURI().equals("/api/health");
+        return !request.getRequestURI().startsWith("/api/")
+            || request.getMethod().equalsIgnoreCase("OPTIONS")
+            || request.getRequestURI().equals("/api/health")
+            || request.getRequestURI().equals("/api/profiles/presence/events");
     }
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {

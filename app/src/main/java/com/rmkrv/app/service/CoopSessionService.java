@@ -52,13 +52,13 @@ public class CoopSessionService {
 
     @Transactional
     public CoopSessionResponse current(String key) {
-        Profile me = auth.requireComplete(key);
+        UUID profileId = auth.requireCompleteId(key);
         Instant now = Instant.now();
-        for (CoopSession current : sessions.findCurrent(me.id, CURRENT)) {
+        for (CoopSession current : sessions.findCurrent(profileId, CURRENT)) {
             if (current.state == CoopSessionState.SEARCHING && !current.queueExpiresAt.isAfter(now)) {
                 current.state = CoopSessionState.CANCELLED;
                 sessions.save(current);
-            } else return response(current, me);
+            } else return response(current, profileId);
         }
         return null;
     }
@@ -86,12 +86,12 @@ public class CoopSessionService {
 
     @Transactional
     public CoopSessionResponse status(String key, UUID id) {
-        Profile me = auth.requireComplete(key);
-        CoopSession session = requireParticipant(sessions.findById(id).orElseThrow(() -> new NotFoundException("Session not found")), me);
+        UUID profileId = auth.requireCompleteId(key);
+        CoopSession session = requireParticipant(sessions.findById(id).orElseThrow(() -> new NotFoundException("Session not found")), profileId);
         if (session.state == CoopSessionState.SEARCHING && !session.queueExpiresAt.isAfter(Instant.now())) {
             session.state = CoopSessionState.CANCELLED; sessions.save(session);
         }
-        return response(session, me);
+        return response(session, profileId);
     }
 
     @Transactional
@@ -149,7 +149,8 @@ public class CoopSessionService {
 
     @Transactional(readOnly = true)
     public List<CoopMessageResponse> messages(String key, UUID id) {
-        Profile me = auth.requireComplete(key); requireParticipant(sessions.findById(id).orElseThrow(() -> new NotFoundException("Session not found")), me);
+        UUID profileId = auth.requireCompleteId(key);
+        requireParticipant(sessions.findById(id).orElseThrow(() -> new NotFoundException("Session not found")), profileId);
         return messages.findBySessionIdOrderByCreatedAtAsc(id, PageRequest.of(0, 300)).stream().map(this::message).toList();
     }
 
@@ -198,7 +199,11 @@ public class CoopSessionService {
     }
 
     private CoopSession requireParticipant(CoopSession session, Profile me) {
-        if (!session.playerOne.id.equals(me.id) && (session.playerTwo == null || !session.playerTwo.id.equals(me.id))) throw new NotFoundException("Session not found");
+        return requireParticipant(session, me.id);
+    }
+
+    private CoopSession requireParticipant(CoopSession session, UUID profileId) {
+        if (!session.playerOne.id.equals(profileId) && (session.playerTwo == null || !session.playerTwo.id.equals(profileId))) throw new NotFoundException("Session not found");
         return session;
     }
     private Profile partner(CoopSession session, Profile me) { return session.playerTwo == null ? null : session.playerOne.id.equals(me.id) ? session.playerTwo : session.playerOne; }
@@ -212,14 +217,18 @@ public class CoopSessionService {
     }
 
     private CoopSessionResponse response(CoopSession session, Profile me) {
-        Profile partner = partner(session, me);
-        boolean mine = me.id.equals(session.playerOne.id) ? session.playerOneAccepted : session.playerTwoAccepted;
-        boolean theirs = me.id.equals(session.playerOne.id) ? session.playerTwoAccepted : session.playerOneAccepted;
+        return response(session, me.id);
+    }
+
+    private CoopSessionResponse response(CoopSession session, UUID profileId) {
+        Profile partner = session.playerTwo == null ? null : session.playerOne.id.equals(profileId) ? session.playerTwo : session.playerOne;
+        boolean mine = profileId.equals(session.playerOne.id) ? session.playerOneAccepted : session.playerTwoAccepted;
+        boolean theirs = profileId.equals(session.playerOne.id) ? session.playerTwoAccepted : session.playerOneAccepted;
         SessionProblem problem = session.problemSlug == null ? null : new SessionProblem(session.problemTitle, session.problemSlug, session.problemDifficulty, session.problemUrl);
         return new CoopSessionResponse(session.id, session.state.name(), player(session.playerOne), player(session.playerTwo), player(partner), problem,
             session.proposedBy == null ? null : session.proposedBy.id, mine, theirs,
             session.rerollRequestedBy == null ? null : session.rerollRequestedBy.id, session.queueExpiresAt,
             session.startedAt, session.closedAt, session.closedBy == null ? null : session.closedBy.id,
-            me.id.equals(session.playerOne.id), voice.presence(session.id, me.id), partner == null ? new VoicePresence(false, false) : voice.presence(session.id, partner.id));
+            profileId.equals(session.playerOne.id), voice.presence(session.id, profileId), partner == null ? new VoicePresence(false, false) : voice.presence(session.id, partner.id));
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.Instant;
+import java.util.Collection;
 
 public interface MessageRepository extends JpaRepository<Message, UUID> {
     @EntityGraph(attributePaths = "sender")
@@ -27,6 +28,25 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
 
     @Query("select count(m) from Message m where (m.conversation.profileA.id = :profileId or m.conversation.profileB.id = :profileId) and m.sender.id <> :profileId and m.readAt is null")
     long countAllUnread(@Param("profileId") UUID profileId);
+
+    @Query("""
+        select new com.rmkrv.app.repository.ConversationMessageSummary(
+            c.id, m.id, m.sender.id, m.sender.leetcodeUsername, m.content,
+            m.ciphertext, m.encryptionIv, m.encryptionSalt, m.signature, m.cryptoVersion,
+            m.senderKeyFingerprint, m.recipientKeyFingerprint, m.recipientKeyEnvelopes,
+            m.createdAt, m.editedAt,
+            (select count(unread) from Message unread
+             where unread.conversation = c and unread.sender.id <> :profileId and unread.readAt is null)
+        )
+        from Conversation c
+        left join Message m on m.conversation = c and m.createdAt = (
+            select max(latest.createdAt) from Message latest where latest.conversation = c
+        )
+        where c.id in :conversationIds
+        """)
+    List<ConversationMessageSummary> summarizeConversations(
+        @Param("conversationIds") Collection<UUID> conversationIds,
+        @Param("profileId") UUID profileId);
 
     @Modifying
     @Query("update Message m set m.readAt = :readAt where m.conversation.id = :conversationId and m.sender.id <> :profileId and m.readAt is null")

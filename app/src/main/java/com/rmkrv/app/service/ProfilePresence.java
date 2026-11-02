@@ -12,9 +12,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 /** Live tab leases for the single-instance API; last-seen history remains in Postgres. */
 @Service
 public class ProfilePresence {
+    private static final long DATABASE_TOUCH_INTERVAL_SECONDS = 60;
     private record Tab(UUID profileId, String session, Instant seenAt) {}
     public record Status(UUID id, boolean lookingNow, Instant lastSeenAt) {}
     private final Map<String, Tab> tabs = new HashMap<>();
+    private final Map<UUID, Instant> lastPersisted = new HashMap<>();
     private final List<SseEmitter> listeners = new CopyOnWriteArrayList<>();
 
     public synchronized boolean isOnline(UUID id) {
@@ -33,6 +35,15 @@ public class ProfilePresence {
         if (active) tabs.put(key, new Tab(id, session, seenAt)); else tabs.remove(key);
         boolean online = isOnline(id);
         if (wasOnline != online || !active) publish(new Status(id, online, seenAt));
+    }
+
+    public synchronized boolean shouldPersistLastSeen(UUID id, boolean active, Instant now) {
+        Instant previous = lastPersisted.get(id);
+        return !active || previous == null || previous.plusSeconds(DATABASE_TOUCH_INTERVAL_SECONDS).isBefore(now);
+    }
+
+    public synchronized void recordPersisted(UUID id, Instant seenAt) {
+        lastPersisted.put(id, seenAt);
     }
 
     public synchronized void logout(String session) {
@@ -56,6 +67,7 @@ public class ProfilePresence {
         Map<UUID, Instant> expired = new HashMap<>();
         tabs.values().removeIf(t -> { if (t.seenAt().isAfter(Instant.now().minusSeconds(35))) return false; expired.merge(t.profileId(), t.seenAt(), (a,b) -> a.isAfter(b) ? a : b); return true; });
         expired.forEach((id, seen) -> { if (!isOnline(id)) publish(new Status(id, false, seen)); });
+        lastPersisted.keySet().removeIf(id -> !isOnline(id));
         listeners.forEach(e -> send(e, "ping", "keepalive"));
     }
 

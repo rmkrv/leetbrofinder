@@ -53,8 +53,8 @@ public class ConnectionService {
 
     @Transactional(readOnly = true)
     public List<ConnectionResponse> list(String key) {
-        Profile me = auth.requireComplete(key);
-        return connections.findForProfile(me.id).stream().map(c -> response(c, me)).toList();
+        UUID profileId = auth.requireCompleteId(key);
+        return connections.findForProfile(profileId).stream().map(c -> response(c, profileId)).toList();
     }
 
     @Transactional
@@ -72,7 +72,11 @@ public class ConnectionService {
     }
 
     private ConnectionResponse response(Connection connection, Profile me) {
-        boolean incoming = connection.recipient.id.equals(me.id);
+        return response(connection, me.id);
+    }
+
+    private ConnectionResponse response(Connection connection, UUID profileId) {
+        boolean incoming = connection.recipient.id.equals(profileId);
         Profile other = incoming ? connection.requester : connection.recipient;
         boolean revealContact = connection.status == ConnectionStatus.ACCEPTED;
         return new ConnectionResponse(connection.id, connection.status.name(), incoming ? "INCOMING" : "OUTGOING",

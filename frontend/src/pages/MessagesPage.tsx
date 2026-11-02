@@ -18,7 +18,7 @@ const displayName = (value: string | null | undefined) => value?.trim() || 'Unkn
 const initials = (value: string | null | undefined) => displayName(value).slice(0, 2).toUpperCase()
 type DisplayMessage = Decrypted<Message>
 
-const REFRESH_AFTER_MS = 8000
+const REFRESH_AFTER_MS = 15_000
 
 type MessagesSnapshot = {
   profileKey: string
@@ -205,6 +205,7 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!profileKey) return
     const poll = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       void loadConversations(true).catch(cause =>
         setError(cause instanceof Error ? cause.message : 'Could not refresh conversations'))
     }, REFRESH_AFTER_MS)
@@ -236,7 +237,7 @@ export default function MessagesPage() {
       }
     }
     void load(true)
-    const poll = window.setInterval(() => { void load(true) }, REFRESH_AFTER_MS)
+    const poll = window.setInterval(() => { if (document.visibilityState === 'visible') void load(true) }, REFRESH_AFTER_MS)
     return () => { stopped = true; window.clearInterval(poll) }
   }, [selected, myProfileId, partnerId, snapshot])
 

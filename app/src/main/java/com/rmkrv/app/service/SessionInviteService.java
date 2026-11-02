@@ -60,10 +60,10 @@ public class SessionInviteService {
 
     @Transactional
     public List<SessionInviteResponse> list(String key) {
-        Profile me = auth.requireComplete(key);
+        UUID profileId = auth.requireCompleteId(key);
         Instant now = Instant.now();
         List<SessionInviteResponse> result = new ArrayList<>();
-        for (SessionInvite invite : invites.findForProfile(me.id)) {
+        for (SessionInvite invite : invites.findForProfile(profileId)) {
             if (invite.status == SessionInviteStatus.PENDING && !invite.expiresAt.isAfter(now)) {
                 invite.status = SessionInviteStatus.EXPIRED;
                 invite.respondedAt = now;
@@ -71,7 +71,7 @@ public class SessionInviteService {
             }
             boolean ready = invite.status == SessionInviteStatus.ACCEPTED && invite.session != null
                 && (invite.session.state == CoopSessionState.NEGOTIATING || invite.session.state == CoopSessionState.ACTIVE);
-            if (invite.status == SessionInviteStatus.PENDING || ready) result.add(response(invite, me));
+            if (invite.status == SessionInviteStatus.PENDING || ready) result.add(response(invite, profileId));
         }
         return result;
     }
@@ -112,7 +112,11 @@ public class SessionInviteService {
     }
 
     private SessionInviteResponse response(SessionInvite invite, Profile me) {
-        boolean incoming = invite.recipient.id.equals(me.id);
+        return response(invite, me.id);
+    }
+
+    private SessionInviteResponse response(SessionInvite invite, UUID profileId) {
+        boolean incoming = invite.recipient.id.equals(profileId);
         Profile other = incoming ? invite.requester : invite.recipient;
         SessionPlayer player = new SessionPlayer(other.id, other.leetcodeUsername, other.avatarUrl, other.contestRating);
         return new SessionInviteResponse(invite.id, invite.status.name(), incoming ? "INCOMING" : "OUTGOING",

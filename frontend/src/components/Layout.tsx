@@ -25,18 +25,22 @@ export default function Layout() {
   useEffect(() => {
     if (!hasProfile) { setUnreadCount(0); return }
     let stopped = false
-    const load = () => getUnreadCount().then(result => { if (!stopped) setUnreadCount(result.unreadCount) }).catch(() => {})
+    const load = () => {
+      if (document.visibilityState !== 'visible') return
+      void getUnreadCount().then(result => { if (!stopped) setUnreadCount(result.unreadCount) }).catch(() => {})
+    }
     void load()
-    const poll = window.setInterval(load, 8000)
+    const poll = window.setInterval(load, 30_000)
     window.addEventListener(UNREAD_CHANGED_EVENT, load)
-    return () => { stopped = true; window.clearInterval(poll); window.removeEventListener(UNREAD_CHANGED_EVENT, load) }
+    document.addEventListener('visibilitychange', load)
+    return () => { stopped = true; window.clearInterval(poll); window.removeEventListener(UNREAD_CHANGED_EVENT, load); document.removeEventListener('visibilitychange', load) }
   }, [hasProfile])
   useEffect(() => {
     if (!hasProfile) return
     const heartbeat = () => { void markPresent(document.visibilityState === 'visible').catch(() => {}) }
     const leave = () => { void markPresent(false).catch(() => {}) }
     heartbeat()
-    const poll = window.setInterval(() => { if (document.visibilityState === 'visible') heartbeat() }, 10_000)
+    const poll = window.setInterval(() => { if (document.visibilityState === 'visible') heartbeat() }, 20_000)
     document.addEventListener('visibilitychange', heartbeat)
     window.addEventListener('pagehide', leave)
     window.addEventListener('pageshow', heartbeat)

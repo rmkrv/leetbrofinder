@@ -28,9 +28,9 @@ public class VoiceChannelService {
     }
 
     public void leave(String key, UUID sessionId) {
-        Profile me = auth.requireComplete(key);
-        requireParticipant(sessionId, me);
-        leave(sessionId, me.id);
+        UUID profileId = auth.requireCompleteId(key);
+        Room room = requireJoinedRoom(sessionId, profileId);
+        synchronized (room) { leave(sessionId, profileId); }
     }
 
     public void leave(UUID sessionId, UUID profileId) {
@@ -44,36 +44,33 @@ public class VoiceChannelService {
     }
 
     public void mute(String key, UUID sessionId, boolean muted) {
-        Profile me = auth.requireComplete(key);
-        requireOpenParticipant(sessionId, me);
-        Room room = room(sessionId);
+        UUID profileId = auth.requireCompleteId(key);
+        Room room = requireJoinedRoom(sessionId, profileId);
         synchronized (room) {
-            if (!room.members.containsKey(me.id)) throw new BadRequestException("Join voice first");
-            room.members.put(me.id, muted);
+            room.members.put(profileId, muted);
         }
     }
 
     public void signal(String key, UUID sessionId, String type, String payload) {
-        Profile me = auth.requireComplete(key);
-        CoopSession session = requireOpenParticipant(sessionId, me);
-        Profile partner = partner(session, me);
-        Room room = room(sessionId);
+        UUID profileId = auth.requireCompleteId(key);
+        Room room = requireJoinedRoom(sessionId, profileId);
         synchronized (room) {
-            if (!room.members.containsKey(me.id) || partner == null || !room.members.containsKey(partner.id)) {
+            UUID partnerId = room.members.keySet().stream().filter(id -> !id.equals(profileId)).findFirst().orElse(null);
+            if (partnerId == null) {
                 throw new BadRequestException("Both users must be in voice");
             }
-            room.signals.addLast(new Signal(sequence.incrementAndGet(), me.id, partner.id, type, payload));
+            room.signals.addLast(new Signal(sequence.incrementAndGet(), profileId, partnerId, type, payload));
             while (room.signals.size() > 200) room.signals.removeFirst();
         }
     }
 
     public List<VoiceSignalResponse> signals(String key, UUID sessionId, long after) {
-        Profile me = auth.requireComplete(key);
-        requireOpenParticipant(sessionId, me);
+        UUID profileId = auth.requireCompleteId(key);
         Room room = rooms.get(sessionId);
         if (room == null) return List.of();
         synchronized (room) {
-            return room.signals.stream().filter(signal -> signal.to.equals(me.id) && signal.id > after)
+            if (!room.members.containsKey(profileId)) throw new BadRequestException("Join voice first");
+            return room.signals.stream().filter(signal -> signal.to.equals(profileId) && signal.id > after)
                 .map(signal -> new VoiceSignalResponse(signal.id, signal.from, signal.type, signal.payload)).toList();
         }
     }
@@ -89,6 +86,15 @@ public class VoiceChannelService {
 
     private Room room(UUID id) { return rooms.computeIfAbsent(id, ignored -> new Room()); }
 
+    private Room requireJoinedRoom(UUID sessionId, UUID profileId) {
+        Room room = rooms.get(sessionId);
+        if (room == null) throw new BadRequestException("Join voice first");
+        synchronized (room) {
+            if (!room.members.containsKey(profileId)) throw new BadRequestException("Join voice first");
+        }
+        return room;
+    }
+
     private CoopSession requireParticipant(UUID id, Profile me) {
         CoopSession session = sessions.findById(id).orElseThrow(() -> new NotFoundException("Session not found"));
         if (!session.playerOne.id.equals(me.id) && (session.playerTwo == null || !session.playerTwo.id.equals(me.id))) {
@@ -103,11 +109,6 @@ public class VoiceChannelService {
             throw new BadRequestException("This session is closed");
         }
         return session;
-    }
-
-    private Profile partner(CoopSession session, Profile me) {
-        if (session.playerTwo == null) return null;
-        return session.playerOne.id.equals(me.id) ? session.playerTwo : session.playerOne;
     }
 
     private static final class Room {

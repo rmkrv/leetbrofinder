@@ -3,6 +3,7 @@ package com.rmkrv.app.service;
 import com.rmkrv.app.api.ApiModels.*;
 import com.rmkrv.app.domain.Profile;
 import java.util.List;
+import java.util.LinkedHashSet;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -23,7 +24,7 @@ public class ProfileMapper {
         return new ProfileResponse(
             p.id, p.leetcodeUsername, p.preferredLanguage, p.timezone, p.bio,
             includeContact ? p.contactType : null, includeContact ? p.contactUsername : null,
-            p.activities, presence.isOnline(p.id),
+            new LinkedHashSet<>(p.activities), presence.isOnline(p.id),
             p.lastSeenAt, p.verified, p.passwordHash != null, p.avatarUrl,
             live == null ? p.totalSolved : live.totalSolved(),
             live == null ? p.easySolved : live.easySolved(),

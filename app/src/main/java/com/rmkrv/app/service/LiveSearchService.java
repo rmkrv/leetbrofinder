@@ -42,8 +42,8 @@ public class LiveSearchService {
 
     @Transactional
     public LiveSearchResponse status(String key, UUID id) {
-        Profile me = auth.requireComplete(key);
-        LiveSearch s = searches.findById(id).filter(x -> x.profile.id.equals(me.id))
+        UUID profileId = auth.requireCompleteId(key);
+        LiveSearch s = searches.findById(id).filter(x -> x.profile.id.equals(profileId))
             .orElseThrow(() -> new NotFoundException("Live search not found"));
         if (s.status == LiveSearchStatus.SEARCHING && s.expiresAt.isBefore(Instant.now())) {
             s.status = LiveSearchStatus.EXPIRED; searches.save(s);
@@ -53,8 +53,8 @@ public class LiveSearchService {
 
     @Transactional
     public void cancel(String key, UUID id) {
-        Profile me = auth.requireComplete(key);
-        LiveSearch s = searches.findById(id).filter(x -> x.profile.id.equals(me.id))
+        UUID profileId = auth.requireCompleteId(key);
+        LiveSearch s = searches.findById(id).filter(x -> x.profile.id.equals(profileId))
             .orElseThrow(() -> new NotFoundException("Live search not found"));
         if (s.status == LiveSearchStatus.SEARCHING) { s.status = LiveSearchStatus.CANCELLED; searches.save(s); }
     }

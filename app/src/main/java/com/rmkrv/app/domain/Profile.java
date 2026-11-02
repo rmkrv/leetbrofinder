@@ -17,7 +17,8 @@ public class Profile {
     @Column(name = "contact_type", length = 30) public String contactType;
     @Column(name = "contact_username", length = 100) public String contactUsername;
     @Column(name = "last_seen_at") public Instant lastSeenAt;
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     @CollectionTable(name = "profile_activities", joinColumns = @JoinColumn(name = "profile_id"))
     @Enumerated(EnumType.STRING) @Column(name = "activity", length = 32)
     public Set<ActivityType> activities = new LinkedHashSet<>();

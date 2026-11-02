@@ -7,6 +7,8 @@ import com.rmkrv.app.repository.LoginSessionRepository;
 import com.rmkrv.app.repository.ProfileRepository;
 import com.rmkrv.app.web.BadRequestException;
 import com.rmkrv.app.web.UnauthorizedException;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -14,6 +16,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.UUID;
+import java.time.Duration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +30,10 @@ public class ProfileAuthService {
     private final ProfilePresence presence;
     private final BCryptPasswordEncoder passwords = new BCryptPasswordEncoder(12);
     private final SecureRandom random = new SecureRandom();
+    private final Cache<String, Principal> principals = Caffeine.newBuilder()
+        .maximumSize(10_000)
+        .expireAfterWrite(Duration.ofMinutes(2))
+        .build();
 
     public ProfileAuthService(ProfileRepository profiles, LoginSessionRepository sessions, ProfileMapper mapper, ProfilePresence presence) {
         this.profiles = profiles;
@@ -42,12 +50,30 @@ public class ProfileAuthService {
 
     @Transactional(readOnly = true)
     public Profile require(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) throw new UnauthorizedException("Please log in");
-        String tokenHash = hash(rawToken);
-        return sessions.findByTokenHashAndExpiresAtAfter(tokenHash, Instant.now())
-            .map(session -> session.profile)
-            .or(() -> profiles.findByOwnerKeyHash(tokenHash))
-            .orElseThrow(() -> new UnauthorizedException("Your session is invalid or expired. Please log in again."));
+        String tokenHash = requireTokenHash(rawToken);
+        Instant now = Instant.now();
+        var session = sessions.findByTokenHashAndExpiresAtAfter(tokenHash, now);
+        if (session.isPresent()) {
+            Profile profile = session.get().profile;
+            principals.put(tokenHash, new Principal(profile.id, profile.setupComplete, session.get().expiresAt));
+            return profile;
+        }
+        Profile profile = profiles.findByOwnerKeyHash(tokenHash)
+            .orElseThrow(() -> invalidSession(tokenHash));
+        principals.put(tokenHash, new Principal(profile.id, profile.setupComplete, Instant.MAX));
+        return profile;
+    }
+
+    @Transactional(readOnly = true)
+    public UUID requireId(String rawToken) {
+        return principal(rawToken).profileId();
+    }
+
+    @Transactional(readOnly = true)
+    public UUID requireCompleteId(String rawToken) {
+        Principal principal = principal(rawToken);
+        if (!principal.setupComplete()) throw new BadRequestException("Finish and save your profile setup first");
+        return principal.profileId();
     }
 
     public Profile requireComplete(String rawToken) {
@@ -64,6 +90,7 @@ public class ProfileAuthService {
         if (password.getBytes(StandardCharsets.UTF_8).length > 72 || !passwords.matches(password, profile.passwordHash)) {
             throw new UnauthorizedException("Invalid username or password");
         }
+        invalidateProfile(profile.id);
         profile.ownerKeyHash = hash(newKey());
         profiles.save(profile);
         return createSession(profile, rememberMe);
@@ -79,6 +106,7 @@ public class ProfileAuthService {
         session.tokenHash = hash(rawToken);
         session.expiresAt = rememberMe ? now.plus(30, ChronoUnit.DAYS) : now.plus(12, ChronoUnit.HOURS);
         sessions.save(session);
+        principals.put(session.tokenHash, new Principal(profile.id, profile.setupComplete, session.expiresAt));
         return new AuthResponse(mapper.toResponse(profile), rawToken, session.expiresAt);
     }
 
@@ -86,6 +114,7 @@ public class ProfileAuthService {
     public void logout(String rawToken) {
         if (rawToken != null && !rawToken.isBlank()) {
             String sessionHash = hash(rawToken);
+            principals.invalidate(sessionHash);
             sessions.deleteByTokenHash(sessionHash);
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
                 new org.springframework.transaction.support.TransactionSynchronization() {
@@ -107,8 +136,49 @@ public class ProfileAuthService {
         profile.passwordHash = passwords.encode(rawPassword);
         if (firstPassword) {
             if (profile.id != null) sessions.deleteByProfileId(profile.id);
+            if (profile.id != null) invalidateProfile(profile.id);
             profile.ownerKeyHash = hash(newKey());
         }
+    }
+
+    public void invalidate(String rawToken) {
+        if (rawToken != null && !rawToken.isBlank()) principals.invalidate(hash(rawToken));
+    }
+
+    private Principal principal(String rawToken) {
+        String tokenHash = requireTokenHash(rawToken);
+        Instant now = Instant.now();
+        Principal cached = principals.getIfPresent(tokenHash);
+        if (cached != null) {
+            if (cached.expiresAt().isAfter(now)) return cached;
+            principals.invalidate(tokenHash);
+        }
+        var session = sessions.findPrincipal(tokenHash, now);
+        if (session.isPresent()) {
+            var result = session.get();
+            Principal principal = new Principal(result.getProfileId(), result.getSetupComplete(), result.getExpiresAt());
+            principals.put(tokenHash, principal);
+            return principal;
+        }
+        Profile profile = profiles.findByOwnerKeyHash(tokenHash)
+            .orElseThrow(() -> invalidSession(tokenHash));
+        Principal principal = new Principal(profile.id, profile.setupComplete, Instant.MAX);
+        principals.put(tokenHash, principal);
+        return principal;
+    }
+
+    private String requireTokenHash(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) throw new UnauthorizedException("Please log in");
+        return hash(rawToken);
+    }
+
+    private UnauthorizedException invalidSession(String tokenHash) {
+        principals.invalidate(tokenHash);
+        return new UnauthorizedException("Your session is invalid or expired. Please log in again.");
+    }
+
+    private void invalidateProfile(UUID profileId) {
+        principals.asMap().entrySet().removeIf(entry -> entry.getValue().profileId().equals(profileId));
     }
 
     public String hash(String value) {
@@ -119,4 +189,6 @@ public class ProfileAuthService {
             throw new IllegalStateException(ex);
         }
     }
+
+    private record Principal(UUID profileId, boolean setupComplete, Instant expiresAt) {}
 }

@@ -13,7 +13,7 @@ import {
 import type { Connection, SessionInvite } from '../types'
 
 const SESSION_KEY = 'leetbrofinder.coop-session-id'
-const REFRESH_AFTER_MS = 3000
+const REFRESH_AFTER_MS = 10_000
 
 type ConnectionsSnapshot = {
   profileKey: string
@@ -73,7 +73,7 @@ export default function ConnectionsPage() {
   useEffect(() => {
     if (!getProfileKey()) return
     void load()
-    const poll = window.setInterval(() => { void load(true) }, REFRESH_AFTER_MS)
+    const poll = window.setInterval(() => { if (document.visibilityState === 'visible') void load(true) }, REFRESH_AFTER_MS)
     return () => window.clearInterval(poll)
   }, [load])
 

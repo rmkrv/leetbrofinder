@@ -65,12 +65,16 @@ public class ProfileService {
 
     @Transactional
     public void markPresent(String key, UUID client, boolean active) {
-        Profile p = auth.require(key);
+        UUID profileId = auth.requireId(key);
         Instant now = Instant.now();
-        profiles.updateLastSeenAt(p.id, now);
+        boolean persisted = presence.shouldPersistLastSeen(profileId, active, now);
+        if (persisted) profiles.updateLastSeenAt(profileId, now);
         org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
             new org.springframework.transaction.support.TransactionSynchronization() {
-                @Override public void afterCommit() { presence.update(p.id, auth.hash(key), client, active, now); }
+                @Override public void afterCommit() {
+                    if (persisted) presence.recordPersisted(profileId, now);
+                    presence.update(profileId, auth.hash(key), client, active, now);
+                }
             });
     }
 
@@ -91,7 +95,9 @@ public class ProfileService {
         auth.setPassword(p, request.password());
         p.setupComplete = true;
         try { mapper.applySnapshot(p, leetCode.fetch(p.leetcodeUsername)); } catch (RuntimeException ignored) {}
-        return mapper.toResponse(profiles.save(p));
+        Profile saved = profiles.save(p);
+        auth.invalidate(key);
+        return mapper.toResponse(saved);
     }
 
     private String trimToNull(String value) {
