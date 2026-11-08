@@ -1,29 +1,36 @@
 # LeetBroFinder
 
-LeetBroFinder is a small, non-commercial app for finding LeetCode practice partners. Users verify ownership of a public LeetCode profile, add their practice preferences, browse compatible profiles, message each other, or open a cooperative coding session with another queued user.
+LeetBroFinder helps LeetCode users find compatible practice partners, chat, and start cooperative coding sessions.
 
-## Live app
+**Live app:** [leetbrofinder.rmkrv.com](https://leetbrofinder.rmkrv.com)
 
-- Frontend: [leetbrofinder.rmkrv.com](https://leetbrofinder.rmkrv.com)
-- API health: [Cloud Run `/api/health`](https://leetbrofinder-api-830799638465.europe-central2.run.app/api/health)
+## Features
 
-## Stack
+- Public LeetCode profile verification
+- Partner discovery by rating, language, activity, availability, and timezone
+- Direct messages and connection requests
+- Cooperative session matchmaking, problem suggestions, and optional voice chat
+- Browser-based encryption for new direct and session messages
 
-- React + Vite + TypeScript
-- Spring Boot REST API (Java 21)
-- Neon PostgreSQL + Flyway migrations
-- LeetCode's public GraphQL endpoint with bounded Caffeine caches for profiles and stable problem metadata
-- Vercel for the frontend and Google Cloud Run for the API
+## Tech stack
+
+- React, Vite, and TypeScript
+- Spring Boot and Java 21
+- PostgreSQL with Flyway migrations
+- Vercel and Google Cloud Run
 
 ## Run locally
 
-1. Start PostgreSQL:
+Requirements: Java 21, Node.js, npm, and Docker.
+
+1. Review the example environment files and set the required variables.
+2. Start PostgreSQL:
 
    ```bash
    docker compose up -d postgres
    ```
 
-2. Start the API:
+3. Start the API:
 
    ```bash
    cd app
@@ -32,7 +39,7 @@ LeetBroFinder is a small, non-commercial app for finding LeetCode practice partn
 
    On Windows, use `mvnw.cmd spring-boot:run`.
 
-3. Start the web app:
+4. In another terminal, start the frontend:
 
    ```bash
    cd frontend
@@ -42,66 +49,12 @@ LeetBroFinder is a small, non-commercial app for finding LeetCode practice partn
 
 Open `http://localhost:5173`.
 
-To preview the frontend against the deployed API without starting the local API or PostgreSQL, create `frontend/.env.local` with `API_PROXY_TARGET=https://leetbrofinder-api-830799638465.europe-central2.run.app`, then run `npm run dev` from `frontend`. Requests to `/api` stay on the Vite origin and are proxied to the deployed service. This uses live application data.
+## Account verification and privacy
 
-## Verification
+LeetBroFinder verifies account ownership by asking users to place a temporary token in the public **About** section of their LeetCode profile. It never requests a LeetCode password, cookie, or session token.
 
-The app generates a short token such as `leetbro-verify-a1b2...`. The user adds it to their public LeetCode **About** section, then asks the app to check it. LeetBroFinder never requests a LeetCode password, cookie, or session token. After verification, the user finishes setup and creates a separate LeetBroFinder password. Passwords are stored as BCrypt hashes, never as plaintext.
+LeetBroFinder account passwords are stored as BCrypt hashes. New direct and cooperative-session messages are encrypted and signed in the browser before reaching the API. Private encryption keys remain in the browser and are not backed up, so clearing browser storage can make encrypted message history unavailable on that device.
 
-Users log in with their LeetCode username and LeetBroFinder password. A normal login lasts 12 hours in the current browser session. Selecting **Stay signed in for 30 days** stores an opaque session token on that device for 30 days.
+## Copyright
 
-## Configuration
-
-Copy `.env.example` values into your environment as needed. The frontend proxies `/api` to `http://localhost:8080` during development. Production builds set `VITE_API_URL` to the deployed API origin.
-
-The Spring Boot API reads `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. For Neon, use the pooled JDBC host for application traffic and startup migrations. The Hikari pool defaults to 10 connections with two warm idle connections and can be adjusted with `DB_POOL_SIZE` and `DB_POOL_MIN_IDLE`. No database credentials are stored in application configuration or source control.
-
-For local Docker Compose, set `POSTGRES_PASSWORD` for the container and export the `DB_*` values shown in `.env.example` before starting Spring Boot.
-
-## Production deployment
-
-The frontend is deployed from the `frontend` directory on Vercel with:
-
-```text
-VITE_API_URL=https://leetbrofinder-api-830799638465.europe-central2.run.app
-```
-
-The API runs as the public Cloud Run service `leetbrofinder-api` in `europe-central2`. It keeps one warm instance, is capped at one instance because presence is currently in memory, and accepts 16 concurrent requests with 1 CPU and 512 MiB of memory. Database credentials are supplied through Google Secret Manager and are never stored in the repository.
-
-Presence changes are pushed to browsers over server-sent events. Visible tabs renew an in-memory lease every 20 seconds; hiding or closing a tab and logging out release it immediately. Lost connections expire after 35 seconds. Last-seen timestamps are persisted to Postgres at most once per minute while a tab remains visible and immediately when it leaves. This presence registry relies on the one-instance deployment; use shared presence storage and pub/sub before increasing the instance count. After an API restart, visible tabs restore their presence on their next heartbeat.
-
-## API highlights
-
-- `POST /api/verification/start`
-- `POST /api/verification/{id}/confirm`
-- `POST /api/auth/login` and `POST /api/auth/logout`
-- `GET /api/profiles` with rating, language, activity, availability, and timezone filters
-- `PATCH /api/profiles/me`
-- `POST /api/live-search` and `GET /api/live-search/{id}`
-- `POST /api/coop-sessions/queue` and `GET /api/coop-sessions/{id}`
-- `POST /api/coop-sessions/{id}/accept`, `/reroll`, `/suggest`, and `/leave`
-- `GET/POST /api/coop-sessions/{id}/messages` and the `/voice/*` signaling endpoints
-- `PUT /api/e2ee/keys/me` and `GET /api/e2ee/keys/{profileId}`
-- `GET/POST /api/connections` and `POST /api/connections/{id}/accept`
-- `GET/POST /api/conversations`, including unread counts and read state
-- `PATCH/DELETE /api/conversations/{id}/messages/{messageId}` for sender-owned message edits and deletion
-
-## Cooperative coding sessions
-
-The API owns the matchmaking queue and pairs users by the closest available contest rating. It reads the current LeetCode catalog size and selects a problem at a uniformly random catalog index. Either partner can suggest a LeetCode URL/title, and a reroll needs the other partner's agreement. The session becomes active only when both users accept the current problem. There is no timer, score, winner, or submission verification.
-
-Session discussion is stored with the session. Optional voice uses browser WebRTC audio and short-lived, in-memory signaling state on the API; it is not a persistent voice room. Partners can exchange connection requests after a session starts. Users can also add an optional Discord, Telegram, LinkedIn, or other contact handle to their public profile.
-
-## End-to-end encrypted messages
-
-New direct messages and cooperative-session messages are encrypted and signed in the browser before they reach the API. Each browser creates a non-exportable P-256 ECDH encryption key and ECDSA signing key in IndexedDB. Every message uses a fresh AES-256-GCM content key, which is separately wrapped for all registered devices belonging to both participants. The API stores ciphertext, authenticated encryption parameters, signatures, and wrapped keys; it never receives plaintext or content keys.
-
-Device keys are immutable after registration, and the browser pins a partner's known device fingerprints. Existing version 1 encrypted messages remain readable on the original device, and rows from before migration V7 remain readable as visibly labeled legacy unencrypted messages; they are not silently deleted or rewritten.
-
-New browsers register as additional recipients, so future messages can be read on every registered device. A newly added device cannot decrypt older messages that were created before its key existed, and clearing browser storage still loses that device's private keys. The design does not include key backup or a Signal-style forward-secrecy ratchet.
-
-Authenticated profile actions use an opaque session token in the internal `X-Profile-Key` header. The token is managed by the frontend and is never presented as a user credential. API responses are rate-limited per client IP.
-
-## License
-
-LeetBroFinder is licensed under the [MIT License](LICENSE).
+Copyright (c) 2026 rmkrv. All rights reserved. This repository does not grant a license to use, modify, or redistribute the source code.
